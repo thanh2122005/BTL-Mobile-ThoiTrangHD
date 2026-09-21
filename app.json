@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "appw3",
-    "slug": "appw3",
+    "name": "BTLMobile2",
+    "slug": "btlmobile2",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "appw3",
+    "scheme": "btlmobile2",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
