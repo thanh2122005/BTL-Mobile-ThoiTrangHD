@@ -34,6 +34,25 @@ export default function ProductDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [selectedSize, setSelectedSize] = useState('M');
   const [selectedColor, setSelectedColor] = useState('#000000');
+  const [showSizeGuide, setShowSizeGuide] = useState(false);
+  const [calcHeight, setCalcHeight] = useState('168');
+  const [calcWeight, setCalcWeight] = useState('62');
+
+  const getRecommendedSize = (hStr: string, wStr: string, isShoe: boolean) => {
+    const h = parseInt(hStr, 10) || 168;
+    const w = parseInt(wStr, 10) || 62;
+    if (isShoe) {
+      if (h < 160 || w < 50) return '37';
+      if (h < 168 || w < 60) return '39';
+      if (h < 175 || w < 72) return '41';
+      return '42';
+    }
+    if (h < 162 && w < 54) return 'S';
+    if (h < 172 && w < 65) return 'M';
+    if (h < 180 && w < 76) return 'L';
+    return 'XL';
+  };
+  const [selectedQuantity, setSelectedQuantity] = useState(1);
   const [relatedProducts, setRelatedProducts] = useState<any[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -392,7 +411,7 @@ export default function ProductDetailScreen() {
             <View style={styles.optionSection}>
               <View style={styles.sizeHeader}>
                 <Text style={styles.optionTitle}>KÍCH THƯỚC</Text>
-                <TouchableOpacity>
+                <TouchableOpacity onPress={() => setShowSizeGuide(true)} activeOpacity={0.7}>
                   <Text style={styles.sizeGuideText}>Hướng dẫn chọn size</Text>
                 </TouchableOpacity>
               </View>
@@ -624,6 +643,114 @@ export default function ProductDetailScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Size Guide Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showSizeGuide}
+        onRequestClose={() => setShowSizeGuide(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity 
+            style={StyleSheet.absoluteFillObject} 
+            activeOpacity={1} 
+            onPress={() => setShowSizeGuide(false)} 
+          />
+          <View style={[styles.reviewModalCard, { maxHeight: '90%', maxWidth: 540 }]}>
+            <View style={styles.reviewModalHeader}>
+              <View>
+                <Text style={styles.reviewModalTitle}>Bảng quy đổi kích cỡ & Tư vấn Size</Text>
+                <Text style={styles.reviewModalSubtitle}>Chuẩn form dáng thời trang Việt Nam</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowSizeGuide(false)} style={styles.reviewModalClose}>
+                <IconSymbol name="xmark" size={20} color="#747878" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ padding: 20 }} showsVerticalScrollIndicator={false}>
+              {/* Size Table */}
+              <Text style={{ fontSize: 14, fontWeight: '700', color: '#1a1c1c', marginBottom: 8 }}>BẢNG THÔNG SỐ CHUẨN</Text>
+              <View style={styles.sizeTable}>
+                <View style={[styles.sizeTableRow, styles.sizeTableHeaderRow]}>
+                  <Text style={[styles.sizeTableCell, styles.sizeTableHeadCell]}>Size</Text>
+                  <Text style={[styles.sizeTableCell, styles.sizeTableHeadCell]}>Chiều cao</Text>
+                  <Text style={[styles.sizeTableCell, styles.sizeTableHeadCell]}>Cân nặng</Text>
+                </View>
+                {[
+                  { s: 'S', h: '1m50 - 1m62', w: '45 - 53 kg' },
+                  { s: 'M', h: '1m60 - 1m70', w: '54 - 63 kg' },
+                  { s: 'L', h: '1m68 - 1m78', w: '64 - 73 kg' },
+                  { s: 'XL', h: '1m75 - 1m85', w: '74 - 85 kg' },
+                ].map((row, idx) => (
+                  <View key={idx} style={[styles.sizeTableRow, idx % 2 === 1 && { backgroundColor: '#f9fafb' }]}>
+                    <Text style={[styles.sizeTableCell, { fontWeight: '700', color: '#b78103' }]}>{row.s}</Text>
+                    <Text style={styles.sizeTableCell}>{row.h}</Text>
+                    <Text style={styles.sizeTableCell}>{row.w}</Text>
+                  </View>
+                ))}
+              </View>
+
+              {/* Smart Calculator */}
+              <View style={styles.smartCalcBox}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#1a1c1c', marginBottom: 4 }}>
+                  ⚡ GỢI Ý SIZE THEO SỐ ĐO CỦA BẠN
+                </Text>
+                <Text style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>
+                  Nhập chiều cao và cân nặng thực tế để hệ thống tính size chuẩn nhất cho bạn:
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 12 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#444', marginBottom: 4 }}>Chiều cao (cm)</Text>
+                    <TextInput
+                      style={styles.calcInput}
+                      keyboardType="numeric"
+                      value={calcHeight}
+                      onChangeText={setCalcHeight}
+                      placeholder="168"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#444', marginBottom: 4 }}>Cân nặng (kg)</Text>
+                    <TextInput
+                      style={styles.calcInput}
+                      keyboardType="numeric"
+                      value={calcWeight}
+                      onChangeText={setCalcWeight}
+                      placeholder="62"
+                    />
+                  </View>
+                </View>
+
+                {(() => {
+                  const isShoe = product?.category?.toLowerCase() === 'giày';
+                  const recSize = getRecommendedSize(calcHeight, calcWeight, isShoe);
+                  return (
+                    <View style={styles.recResultBox}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <IconSymbol name="checkmark.circle.fill" size={20} color="#16a34a" />
+                        <Text style={{ fontSize: 14, fontWeight: '600', color: '#16a34a' }}>
+                          Size gợi ý cho bạn: <Text style={{ fontWeight: '800', fontSize: 16 }}>{recSize}</Text>
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.applyRecSizeBtn}
+                        onPress={() => {
+                          setSelectedSize(recSize);
+                          setShowSizeGuide(false);
+                          showToast(`Đã chọn Size ${recSize} cho bạn`);
+                        }}
+                      >
+                        <Text style={styles.applyRecSizeText}>CHỌN SIZE NÀY</Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })()}
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {/* Review Submission Modal */}
       <Modal
@@ -1283,6 +1410,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111827',
   },
+  reviewModalSubtitle: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 2,
+  },
   reviewModalClose: {
     padding: 6,
     borderRadius: 16,
@@ -1472,6 +1604,57 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     width: '100%',
   },
+  quantityPickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    backgroundColor: '#ffffff',
+    overflow: 'hidden',
+  },
+  quantityPickerBtn: {
+    width: 44,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f8f8f8',
+  },
+  quantityPickerBtnDisabled: {
+    backgroundColor: '#f1f1f1',
+    opacity: 0.5,
+  },
+  quantityNumberBox: {
+    minWidth: 48,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+  },
+  quantityNumberText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1a1c1c',
+  },
+  stockNoticeText: {
+    fontSize: 13,
+    color: '#747878',
+    fontWeight: '500',
+  },
+  btnDisabled: {
+    backgroundColor: '#f5f5f5',
+    borderColor: '#e0e0e0',
+  },
+  btnDisabledText: {
+    color: '#999999',
+  },
+  btnDisabledDark: {
+    backgroundColor: '#e0e0e0',
+  },
+  btnDisabledDarkText: {
+    color: '#888888',
+  },
   addToCartBtn: {
     flex: 1,
     height: 48,
@@ -1531,5 +1714,70 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: '#1a1c1c',
+  },
+  /* Size Guide Table & Calc */
+  sizeTable: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  sizeTableRow: {
+    flexDirection: 'row',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  sizeTableHeaderRow: {
+    backgroundColor: '#f8fafc',
+  },
+  sizeTableCell: {
+    flex: 1,
+    fontSize: 13,
+    color: '#334155',
+    textAlign: 'center',
+  },
+  sizeTableHeadCell: {
+    fontWeight: '700',
+    color: '#1a1c1c',
+  },
+  smartCalcBox: {
+    backgroundColor: '#fffdf5',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    padding: 16,
+  },
+  calcInput: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 14,
+    color: '#1a1c1c',
+  },
+  recResultBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#fef3c7',
+  },
+  applyRecSizeBtn: {
+    backgroundColor: '#1a1c1c',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  applyRecSizeText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

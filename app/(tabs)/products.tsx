@@ -252,11 +252,15 @@ export default function ProductsScreen() {
                     <View style={styles.imageContainer}>
                       <Image source={imageSource} style={styles.productImage} contentFit="cover" />
                       <View style={styles.imageOverlay} />
-                      {prod.discount && (
+                      {prod.stock !== undefined && prod.stock <= 0 ? (
+                        <View style={styles.outOfStockBadge}>
+                          <Text style={styles.outOfStockBadgeText}>HẾT HÀNG</Text>
+                        </View>
+                      ) : prod.discount ? (
                         <View style={styles.badgeContainer}>
                           <Text style={styles.badgeText}>-{prod.discount}%</Text>
                         </View>
-                      )}
+                      ) : null}
                       <TouchableOpacity
                         style={styles.favoriteButton}
                         onPress={() => toggleFavorite(prod)}
@@ -271,18 +275,20 @@ export default function ProductsScreen() {
                     </View>
                     <View style={styles.infoContainer}>
                       <Text style={styles.productName} numberOfLines={1}>{prod.name}</Text>
-                      {prod.originalPrice ? (
-                        <View style={styles.priceRow}>
-                          <Text style={styles.productPriceError}>{formattedPrice}</Text>
-                          <Text style={styles.productOriginalPrice}>
-                            {typeof prod.originalPrice === 'number'
-                              ? new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(prod.originalPrice)
-                              : prod.originalPrice}
-                          </Text>
-                        </View>
-                      ) : (
-                        <Text style={styles.productPrice}>{formattedPrice}</Text>
-                      )}
+                      {(() => {
+                        const origPrice = prod.originalPrice || prod.original_price || (prod.discount > 0 ? Math.round((prod.price / (1 - prod.discount / 100)) / 1000) * 1000 : null);
+                        if (origPrice && origPrice > prod.price) {
+                          return (
+                            <View style={styles.priceRow}>
+                              <Text style={styles.productPriceError}>{formattedPrice}</Text>
+                              <Text style={styles.productOriginalPrice}>
+                                {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(origPrice)}
+                              </Text>
+                            </View>
+                          );
+                        }
+                        return <Text style={styles.productPrice}>{formattedPrice}</Text>;
+                      })()}
                     </View>
                   </TouchableOpacity>
                 );
@@ -564,6 +570,22 @@ const styles = StyleSheet.create({
   imageOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.03)',
+  },
+  outOfStockBadge: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    backgroundColor: 'rgba(26, 28, 28, 0.88)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    zIndex: 2,
+  },
+  outOfStockBadgeText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   badgeContainer: {
     position: 'absolute',

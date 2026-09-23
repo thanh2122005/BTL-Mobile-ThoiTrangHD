@@ -156,6 +156,11 @@ export default function HomeScreen() {
                   <View style={styles.featuredImageContainer}>
                     <Image source={getImageSource(prod.image)} style={styles.featuredImage} contentFit="cover" />
                     <View style={styles.imageOverlay} />
+                    {prod.discount > 0 && (
+                      <View style={styles.discountBadgeCorner}>
+                        <Text style={styles.discountBadgeCornerText}>-{prod.discount}%</Text>
+                      </View>
+                    )}
                     <TouchableOpacity 
                       style={styles.favoriteButton}
                       onPress={() => toggleFavorite(prod)}
@@ -170,7 +175,21 @@ export default function HomeScreen() {
                   </View>
                   <Text style={styles.productName} numberOfLines={1}>{prod.name}</Text>
                   <View style={styles.productPriceRow}>
-                    <Text style={styles.productPrice}>{formatVND(prod.price)}</Text>
+                    {(() => {
+                      const origPrice = prod.originalPrice || prod.original_price || (prod.discount > 0 ? Math.round((prod.price / (1 - prod.discount / 100)) / 1000) * 1000 : null);
+                      return (
+                        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+                          <Text style={[styles.productPrice, prod.discount > 0 && styles.priceDiscounted]}>
+                            {formatVND(prod.price)}
+                          </Text>
+                          {origPrice && origPrice > prod.price && (
+                            <Text style={styles.priceOriginalCrossed}>
+                              {formatVND(origPrice)}
+                            </Text>
+                          )}
+                        </View>
+                      );
+                    })()}
                     <View style={styles.ratingRow}>
                       <IconSymbol name="star.fill" size={12} color="#A68B5B" />
                       <Text style={styles.ratingText}>4.9</Text>
@@ -195,6 +214,11 @@ export default function HomeScreen() {
                   <View style={styles.gridImageContainer}>
                     <Image source={getImageSource(prod.image)} style={styles.gridImage} contentFit="cover" />
                     <View style={styles.imageOverlay} />
+                    {prod.discount > 0 && (
+                      <View style={styles.discountBadgeCorner}>
+                        <Text style={styles.discountBadgeCornerText}>-{prod.discount}%</Text>
+                      </View>
+                    )}
                     <TouchableOpacity 
                       style={styles.favoriteButtonSmall}
                       onPress={() => toggleFavorite(prod)}
@@ -208,7 +232,21 @@ export default function HomeScreen() {
                     </TouchableOpacity>
                   </View>
                   <Text style={styles.gridName} numberOfLines={1}>{prod.name}</Text>
-                  <Text style={styles.gridPrice}>{formatVND(prod.price)}</Text>
+                  {(() => {
+                    const origPrice = prod.originalPrice || prod.original_price || (prod.discount > 0 ? Math.round((prod.price / (1 - prod.discount / 100)) / 1000) * 1000 : null);
+                    return (
+                      <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: 4 }}>
+                        <Text style={[styles.gridPrice, prod.discount > 0 && styles.priceDiscounted]}>
+                          {formatVND(prod.price)}
+                        </Text>
+                        {origPrice && origPrice > prod.price && (
+                          <Text style={styles.priceOriginalCrossed}>
+                            {formatVND(origPrice)}
+                          </Text>
+                        )}
+                      </View>
+                    );
+                  })()}
                 </TouchableOpacity>
               ))}
             </View>
@@ -535,8 +573,32 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   gridPrice: {
-    fontSize: 16,
-    fontWeight: '500',
+    fontSize: 15,
+    fontWeight: '600',
     color: '#121212',
-  }
+  },
+  discountBadgeCorner: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: '#ba1a1a',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    zIndex: 10,
+  },
+  discountBadgeCornerText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  priceDiscounted: {
+    color: '#ba1a1a',
+    fontWeight: '700',
+  },
+  priceOriginalCrossed: {
+    fontSize: 12,
+    color: '#9ca3af',
+    textDecorationLine: 'line-through',
+  },
 });

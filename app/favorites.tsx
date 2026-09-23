@@ -107,7 +107,20 @@ export default function FavoritesScreen() {
                       <Text style={styles.productName} numberOfLines={1}>
                         {item.name}
                       </Text>
-                      <Text style={styles.productPrice}>{formattedPrice}</Text>
+                      {(() => {
+                        const origPrice = item.originalPrice || item.original_price || (item.discount > 0 ? Math.round((item.price / (1 - item.discount / 100)) / 1000) * 1000 : null);
+                        if (origPrice && origPrice > item.price) {
+                          return (
+                            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: 4 }}>
+                              <Text style={[styles.productPrice, { color: '#ba1a1a', fontWeight: '700' }]}>{formattedPrice}</Text>
+                              <Text style={{ fontSize: 12, color: '#9ca3af', textDecorationLine: 'line-through' }}>
+                                {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(origPrice)}
+                              </Text>
+                            </View>
+                          );
+                        }
+                        return <Text style={styles.productPrice}>{formattedPrice}</Text>;
+                      })()}
                     </TouchableOpacity>
                   </View>
                 </View>
