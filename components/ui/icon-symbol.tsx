@@ -66,6 +66,11 @@ const MAPPING = {
   'camera.fill': 'photo-camera',
   'house': 'home',
   'xmark': 'close',
+  'tag': 'local-offer',
+  'tag.fill': 'local-offer',
+  'ticket': 'confirmation-number',
+  'ticket.fill': 'confirmation-number',
+  'sparkles': 'auto-awesome',
 } as IconMapping;
 
 /**
