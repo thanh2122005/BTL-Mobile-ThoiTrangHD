@@ -52,6 +52,21 @@ const pool = mysql.createPool({
       // Cột role đã tồn tại
     }
 
+    try {
+      await pool.query("ALTER TABLE orders ADD COLUMN order_note TEXT NULL");
+      console.log('✅ Đã thêm cột `order_note` vào bảng orders.');
+    } catch (e) {}
+
+    try {
+      await pool.query("ALTER TABLE orders ADD COLUMN cancel_reason VARCHAR(255) NULL");
+      console.log('✅ Đã thêm cột `cancel_reason` vào bảng orders.');
+    } catch (e) {}
+
+    try {
+      await pool.query("ALTER TABLE orders ADD COLUMN shipping_fee INT DEFAULT 0");
+      console.log('✅ Đã thêm cột `shipping_fee` vào bảng orders.');
+    } catch (e) {}
+
     // Đảm bảo có tài khoản Admin chính thức
     const [adminCheck] = await pool.query("SELECT id FROM users WHERE email = 'admin@thoitranghd.com'");
     if (adminCheck.length === 0) {
@@ -78,12 +93,26 @@ const formatProduct = (p) => {
       features = [];
     }
   }
+
+  const discount = Number(p.discount) || 0;
+  const price = Number(p.price) || 0;
+  let originalPrice = p.original_price ? Number(p.original_price) : null;
+
+  if (discount > 0 && !originalPrice) {
+    originalPrice = Math.round((price / (1 - discount / 100)) / 10000) * 10000;
+    if (originalPrice <= price) {
+      originalPrice = Math.round((price * (1 + discount / 100)) / 1000) * 1000;
+    }
+  }
+
   return {
     ...p,
+    price,
     stock: p.stock !== undefined && p.stock !== null ? Number(p.stock) : 50,
     sold_count: p.sold_count !== undefined && p.sold_count !== null ? Number(p.sold_count) : 0,
-    original_price: p.original_price,
-    originalPrice: p.original_price,
+    original_price: originalPrice,
+    originalPrice: originalPrice,
+    discount,
     features,
   };
 };
@@ -328,6 +357,17 @@ app.get('/api/products/:id', async (req, res) => {
   }
 });
 
+// API lấy tất cả danh sách vouchers công khai cho người dùng chọn
+app.get('/api/vouchers', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM vouchers WHERE (expires_at IS NULL OR expires_at > NOW()) ORDER BY value DESC');
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error('Lỗi lấy danh sách vouchers:', error);
+    res.status(500).json({ success: false, message: 'Lỗi server khi lấy danh sách voucher' });
+  }
+});
+
 // API 3: Kiểm tra Voucher
 app.get('/api/vouchers/:code', async (req, res) => {
   try {
@@ -398,7 +438,9 @@ app.post('/api/orders', async (req, res) => {
   const customerPhone = (req.body.customerPhone || req.body.customer_phone || '').trim();
   const customerAddress = (req.body.customerAddress || req.body.customer_address || '').trim();
   const paymentMethod = req.body.paymentMethod || req.body.payment_method || 'cod';
-  const voucherCode = req.body.voucherCode || req.body.voucher_code || null;
+  let voucherCode = req.body.voucherCode || req.body.voucher_code || null;
+  const orderNote = (req.body.orderNote || req.body.order_note || '').trim();
+  const shippingFee = Math.max(0, Number(req.body.shippingFee || req.body.shipping_fee) || 0);
   const items = req.body.items || [];
 
   if (!items || items.length === 0) {
@@ -512,14 +554,14 @@ app.post('/api/orders', async (req, res) => {
       }
     }
 
-    const validatedTotalPrice = Math.max(0, computedSubtotal - validatedDiscount);
+    const validatedTotalPrice = Math.max(0, computedSubtotal - validatedDiscount) + shippingFee;
     const orderCode = 'HD' + Date.now().toString().slice(-6);
 
     // 3. Tạo bản ghi đơn hàng
     const [result] = await connection.query(
-      `INSERT INTO orders (user_id, order_code, customer_name, customer_phone, customer_address, payment_method, voucher_code, subtotal, discount_amount, total_price, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')`,
-      [userId, orderCode, customerName, customerPhone, customerAddress, paymentMethod, (voucherCode && String(voucherCode).trim()) ? String(voucherCode).trim().toUpperCase() : null, computedSubtotal, validatedDiscount, validatedTotalPrice]
+      `INSERT INTO orders (user_id, order_code, customer_name, customer_phone, customer_address, payment_method, voucher_code, subtotal, discount_amount, shipping_fee, total_price, order_note, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')`,
+      [userId, orderCode, customerName, customerPhone, customerAddress, paymentMethod, (voucherCode && String(voucherCode).trim()) ? String(voucherCode).trim().toUpperCase() : null, computedSubtotal, validatedDiscount, shippingFee, validatedTotalPrice, orderNote || null]
     );
 
     const orderId = result.insertId;
@@ -667,8 +709,10 @@ app.put('/api/orders/:identifier/cancel', async (req, res) => {
       );
     }
 
+    const cancelReason = (req.body.cancelReason || req.body.cancel_reason || 'Khách hàng yêu cầu hủy đơn').trim();
+
     // 3. Cập nhật trạng thái thành Cancelled
-    await connection.query("UPDATE orders SET status = 'Cancelled' WHERE id = ?", [order.id]);
+    await connection.query("UPDATE orders SET status = 'Cancelled', cancel_reason = ? WHERE id = ?", [cancelReason, order.id]);
 
     // 4. Hoàn trả lượt dùng voucher nếu có
     if (order.voucher_code) {
