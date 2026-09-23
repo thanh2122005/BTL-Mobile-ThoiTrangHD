@@ -46,6 +46,9 @@ interface OrderDetail {
   total_price: number;
   status: string;
   created_at: string;
+  order_note?: string;
+  cancel_reason?: string;
+  shipping_fee?: number;
   items: OrderItem[];
 }
 
@@ -190,7 +193,7 @@ export default function OrderDetailsScreen() {
   const status = (order?.status || 'Pending').toLowerCase();
   const isStep1Active = true;
   const isStep2Active = ['processing', 'shipping', 'completed'].includes(status);
-  const isStep3Active = ['shipping', 'processing', 'completed'].includes(status);
+  const isStep3Active = ['shipping', 'completed'].includes(status);
   const isStep4Active = status === 'completed';
 
   const getStatusText = (st?: string) => {
@@ -346,6 +349,20 @@ export default function OrderDetailsScreen() {
                 </View>
               </View>
 
+              {order.order_note ? (
+                <View style={{ marginTop: 12, padding: 12, backgroundColor: '#fffdf5', borderRadius: 8, borderWidth: 1, borderColor: '#fde68a' }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#92400e', marginBottom: 4 }}>📝 Lời dặn Shipper & Ghi chú đơn hàng:</Text>
+                  <Text style={{ fontSize: 13, color: '#1a1c1c' }}>{order.order_note}</Text>
+                </View>
+              ) : null}
+
+              {order.cancel_reason ? (
+                <View style={{ marginTop: 12, padding: 12, backgroundColor: '#fef2f2', borderRadius: 8, borderWidth: 1, borderColor: '#fecaca' }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#b91c1c', marginBottom: 4 }}>❌ Lý do hủy đơn hàng:</Text>
+                  <Text style={{ fontSize: 13, color: '#1a1c1c' }}>{order.cancel_reason}</Text>
+                </View>
+              ) : null}
+
               {/* Items */}
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Sản phẩm ({items.length})</Text>
@@ -419,7 +436,9 @@ export default function OrderDetailsScreen() {
                   </View>
                   <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>Phí vận chuyển</Text>
-                    <Text style={styles.summaryValue}>Miễn phí</Text>
+                    <Text style={styles.summaryValue}>
+                      {order.shipping_fee && Number(order.shipping_fee) > 0 ? formatVND(Number(order.shipping_fee)) : 'Miễn phí'}
+                    </Text>
                   </View>
                   {discountAmount > 0 && (
                     <View style={styles.summaryRow}>
