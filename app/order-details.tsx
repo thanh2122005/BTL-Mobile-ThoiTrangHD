@@ -62,6 +62,32 @@ export default function OrderDetailsScreen() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
 
+  // Return / Warranty states
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [returnItem, setReturnItem] = useState<OrderItem | null>(null);
+  const [returnReason, setReturnReason] = useState<'size' | 'color' | 'defect' | 'wrong'>('size');
+  const [targetSize, setTargetSize] = useState('L');
+  const [returnNote, setReturnNote] = useState('');
+  const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
+
+  const handleOpenReturnModal = (item?: OrderItem) => {
+    const it = item || (items.length > 0 ? items[0] : null);
+    setReturnItem(it);
+    setReturnReason('size');
+    setTargetSize(it?.size === 'M' ? 'L' : 'M');
+    setReturnNote('');
+    setShowReturnModal(true);
+  };
+
+  const handleSubmitReturn = () => {
+    setIsSubmittingReturn(true);
+    setTimeout(() => {
+      setIsSubmittingReturn(false);
+      setShowReturnModal(false);
+      showToast('Đã gửi yêu cầu đổi trả! CSKH sẽ liên hệ bạn qua SĐT để hỗ trợ.');
+    }, 1500);
+  };
+
   // Review states
   const [reviewedProductIds, setReviewedProductIds] = useState<string[]>([]);
   const [showReviewModal, setShowReviewModal] = useState(false);
@@ -388,13 +414,22 @@ export default function OrderDetailsScreen() {
                                   <Text style={styles.itemReviewedText}>Đã đánh giá</Text>
                                 </View>
                               ) : (
-                                <TouchableOpacity
-                                  style={styles.itemReviewBtn}
-                                  onPress={() => handleOpenReviewModal(item)}
-                                >
-                                  <IconSymbol name="star.fill" size={12} color="#ffffff" />
-                                  <Text style={styles.itemReviewBtnText}>Đánh giá sản phẩm</Text>
-                                </TouchableOpacity>
+                                <>
+                                  <TouchableOpacity
+                                    style={styles.itemReviewBtn}
+                                    onPress={() => handleOpenReviewModal(item)}
+                                  >
+                                    <IconSymbol name="star.fill" size={12} color="#ffffff" />
+                                    <Text style={styles.itemReviewBtnText}>Đánh giá</Text>
+                                  </TouchableOpacity>
+                                  <TouchableOpacity
+                                    style={styles.itemReturnBtn}
+                                    onPress={() => handleOpenReturnModal(item)}
+                                  >
+                                    <IconSymbol name="tag" size={12} color="#b78103" />
+                                    <Text style={styles.itemReturnBtnText}>Đổi trả</Text>
+                                  </TouchableOpacity>
+                                </>
                               )}
                             </View>
                           )}
@@ -499,6 +534,148 @@ export default function OrderDetailsScreen() {
         onCancel={() => setShowCancelModal(false)}
         onConfirm={handleCancelOrder}
       />
+
+      
+      {/* Return & Warranty Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showReturnModal}
+        onRequestClose={() => setShowReturnModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity 
+            style={StyleSheet.absoluteFillObject} 
+            activeOpacity={1} 
+            onPress={() => setShowReturnModal(false)} 
+          />
+          <View style={styles.reviewModalCard}>
+            <View style={styles.reviewModalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={[styles.returnPolicyIconBadge, { backgroundColor: '#fffbeb' }]}>
+                  <IconSymbol name="tag" size={14} color="#b78103" />
+                </View>
+                <Text style={styles.reviewModalTitle}>Yêu cầu Đổi trả & Bảo hành</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowReturnModal(false)}
+                style={styles.reviewModalClose}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <IconSymbol name="xmark" size={20} color="#1a1c1c" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ paddingHorizontal: 20, paddingVertical: 14 }} showsVerticalScrollIndicator={false}>
+              {returnItem && (
+                <View style={styles.reviewItemBrief}>
+                  <Image source={getImageSource(returnItem.image)} style={styles.reviewItemThumb} contentFit="cover" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.reviewItemName} numberOfLines={1}>{returnItem.product_name}</Text>
+                    <Text style={styles.reviewItemMeta}>
+                      Đang mua: Size {returnItem.size || 'M'} | Màu {returnItem.color === '#000000' ? 'Đen' : returnItem.color || 'Tiêu chuẩn'}
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              {/* Reasons */}
+              <Text style={styles.formGroupLabel}>LÝ DO ĐỔI TRẢ / BẢO HÀNH:</Text>
+              <View style={{ gap: 8, marginBottom: 14 }}>
+                {[
+                  { key: 'size', label: 'Mặc không vừa (Cần đổi sang size khác)', icon: '📏' },
+                  { key: 'color', label: 'Muốn đổi sang màu sắc khác', icon: '🎨' },
+                  { key: 'defect', label: 'Lỗi sản xuất (Bung chỉ, hỏng khóa kéo, lỗi vải)', icon: '🧵' },
+                  { key: 'wrong', label: 'Shop giao sai mẫu / sai size so với đơn', icon: '📦' },
+                ].map((r) => {
+                  const isActive = returnReason === r.key;
+                  return (
+                    <TouchableOpacity
+                      key={r.key}
+                      style={[styles.returnReasonChip, isActive && styles.returnReasonChipActive]}
+                      onPress={() => setReturnReason(r.key as any)}
+                    >
+                      <Text style={{ fontSize: 14 }}>{r.icon}</Text>
+                      <Text style={[styles.returnReasonChipText, isActive && styles.returnReasonChipTextActive]}>
+                        {r.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Target Size selector if reason is size */}
+              {returnReason === 'size' && (
+                <View style={{ marginBottom: 14 }}>
+                  <Text style={styles.formGroupLabel}>CHỌN SIZE BẠN MUỐN ĐỔI SANG:</Text>
+                  <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                    {['S', 'M', 'L', 'XL', '38', '39', '40', '41', '42'].map((sz) => {
+                      const isSel = targetSize === sz;
+                      return (
+                        <TouchableOpacity
+                          key={sz}
+                          style={[styles.sizeOptionChip, isSel && styles.sizeOptionChipActive]}
+                          onPress={() => setTargetSize(sz)}
+                        >
+                          <Text style={[styles.sizeOptionChipText, isSel && styles.sizeOptionChipTextActive]}>
+                            {sz}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+
+              {/* Detail note */}
+              <Text style={styles.formGroupLabel}>MÔ TẢ CHI TIẾT / GHI CHÚ CHO SHOP:</Text>
+              <TextInput
+                style={styles.returnNoteInput}
+                placeholder="VD: Áo hơi chật ngực muốn đổi lên size L, hoặc đường may dưới nách bị bung..."
+                placeholderTextColor="#9ca3af"
+                multiline
+                numberOfLines={3}
+                value={returnNote}
+                onChangeText={setReturnNote}
+              />
+
+              {/* Transparency Notice */}
+              <View style={styles.modalNoticeBox}>
+                <Text style={styles.modalNoticeTitle}>📋 QUY ĐỊNH & CƯỚC VẬN CHUYỂN:</Text>
+                <Text style={styles.modalNoticeText}>
+                  • Lỗi sản xuất hoặc giao sai: Shop chịu 100% phí ship 2 chiều. Shipper đến tận nhà thu hồi và giao hàng mới.
+                </Text>
+                <Text style={styles.modalNoticeText}>
+                  • Đổi size theo ý khách: Sản phẩm còn nguyên tem mác, khách hỗ trợ cước vận chuyển phát sinh.
+                </Text>
+                <Text style={styles.modalNoticeText}>
+                  • Hotline / Zalo tiếp nhận Video mở hộp (Unboxing): 0912.345.678.
+                </Text>
+              </View>
+            </ScrollView>
+
+            <View style={styles.reviewModalFooter}>
+              <TouchableOpacity
+                style={styles.cancelReviewBtn}
+                onPress={() => setShowReturnModal(false)}
+              >
+                <Text style={styles.cancelReviewText}>Đóng</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.submitReviewBtn, { backgroundColor: '#b78103' }]}
+                onPress={handleSubmitReturn}
+                disabled={isSubmittingReturn}
+              >
+                {isSubmittingReturn ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={styles.submitReviewText}>XÁC NHẬN GỬI YÊU CẦU</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Review Modal */}
       <Modal
@@ -1162,4 +1339,167 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#1a1c1c',
   },
+  itemReturnBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#fffdf5',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#fde68a',
+  },
+  itemReturnBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#b78103',
+  },
+  returnPolicyCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginTop: 16,
+  },
+  returnPolicyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  returnPolicyIconBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#dcfce7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  returnPolicyTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  returnPolicyDesc: {
+    fontSize: 12,
+    color: '#64748b',
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  openReturnModalBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#0f172a',
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+  openReturnModalBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#ffffff',
+    letterSpacing: 0.5,
+  },
+  unboxingHint: {
+    backgroundColor: '#fffdf5',
+    padding: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#fef3c7',
+  },
+  unboxingHintText: {
+    fontSize: 11,
+    color: '#92400e',
+    lineHeight: 16,
+  },
+  formGroupLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748b',
+    marginBottom: 8,
+    letterSpacing: 0.5,
+  },
+  returnReasonChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 10,
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: '#e2e8f0',
+  },
+  returnReasonChipActive: {
+    backgroundColor: '#fffdf5',
+    borderColor: '#b78103',
+  },
+  returnReasonChipText: {
+    fontSize: 13,
+    color: '#334155',
+    flex: 1,
+  },
+  returnReasonChipTextActive: {
+    color: '#92400e',
+    fontWeight: '700',
+  },
+  sizeOptionChip: {
+    minWidth: 42,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    alignItems: 'center',
+  },
+  sizeOptionChipActive: {
+    backgroundColor: '#0f172a',
+    borderColor: '#0f172a',
+  },
+  sizeOptionChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  sizeOptionChipTextActive: {
+    color: '#ffffff',
+    fontWeight: '700',
+  },
+  returnNoteInput: {
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 13,
+    color: '#0f172a',
+    backgroundColor: '#f8fafc',
+    minHeight: 64,
+    textAlignVertical: 'top',
+    marginBottom: 14,
+  },
+  modalNoticeBox: {
+    backgroundColor: '#f8fafc',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    gap: 4,
+    marginBottom: 6,
+  },
+  modalNoticeTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginBottom: 4,
+  },
+  modalNoticeText: {
+    fontSize: 11,
+    color: '#64748b',
+    lineHeight: 16,
+  },
+
 });

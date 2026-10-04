@@ -451,6 +451,65 @@ export default function ProductDetailScreen() {
                 {product.description || 'Chất liệu vải cao cấp, form dáng hiện đại phù hợp cho mọi hoàn cảnh. Thiết kế tinh tế với các đường may sắc sảo từ ThoiTrangHD, tôn lên vẻ đẹp thanh lịch và sang trọng.'}
               </Text>
             </View>
+            {/* Fashion Industrial Quality & 7-Day Warranty Commitments */}
+            <View style={styles.qualityCommitmentCard}>
+              <View style={styles.commitmentHeaderRow}>
+                <View style={styles.commitmentIconBadge}>
+                  <IconSymbol name="checkmark.circle.fill" size={15} color="#16a34a" />
+                </View>
+                <Text style={styles.commitmentCardTitle}>CAM KẾT CHẤT LƯỢNG & ĐỔI TRẢ BẢO HÀNH</Text>
+              </View>
+
+              <View style={styles.commitmentGrid}>
+                <View style={styles.commitmentItem}>
+                  <View style={styles.commitmentBullet}>
+                    <Text style={styles.commitmentBulletText}>🏭</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.commitmentItemTitle}>Sản xuất công nghiệp (100 cái như 100)</Text>
+                    <Text style={styles.commitmentItemDesc}>
+                      Dây chuyền tiêu chuẩn hóa, chất vải kiểm định không bai xù, đường may kỹ càng từ công ty may mặc đối tác.
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.commitmentItem}>
+                  <View style={styles.commitmentBullet}>
+                    <Text style={styles.commitmentBulletText}>🔄</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.commitmentItemTitle}>Đổi size & Bảo hành đường may 7 ngày</Text>
+                    <Text style={styles.commitmentItemDesc}>
+                      Đổi size linh hoạt nếu không vừa. 1 đổi 1 miễn phí nếu phát hiện lỗi đường may, khóa kéo hoặc lỗi vải.
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.commitmentItem}>
+                  <View style={styles.commitmentBullet}>
+                    <Text style={styles.commitmentBulletText}>📦</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.commitmentItemTitle}>Đồng kiểm & Video Unboxing</Text>
+                    <Text style={styles.commitmentItemDesc}>
+                      Đồng kiểm khi nhận hàng. Khuyến khích quay video mở gói hàng để được giải quyết khiếu nại hỏa tốc trong 24h.
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.commitmentItem}>
+                  <View style={styles.commitmentBullet}>
+                    <Text style={styles.commitmentBulletText}>🚚</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.commitmentItemTitle}>Đóng gói chuẩn phom & Miễn phí ship lỗi</Text>
+                    <Text style={styles.commitmentItemDesc}>
+                      Hộp carton cao cấp giữ nguyên phom dáng. Nếu shop giao sai mẫu hoặc hàng lỗi, shop chịu 100% cước 2 chiều.
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </View>
 
           </View>
         </View>
@@ -1154,6 +1213,70 @@ const styles = StyleSheet.create({
   descriptionSection: {
     marginBottom: 24,
     paddingTop: 4,
+  },
+    qualityCommitmentCard: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginTop: 8,
+    marginBottom: 24,
+  },
+  commitmentHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 14,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  commitmentIconBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#dcfce7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  commitmentCardTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0f172a',
+    letterSpacing: 0.5,
+  },
+  commitmentGrid: {
+    gap: 12,
+  },
+  commitmentItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  commitmentBullet: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  commitmentBulletText: {
+    fontSize: 14,
+  },
+  commitmentItemTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginBottom: 2,
+  },
+  commitmentItemDesc: {
+    fontSize: 12,
+    color: '#64748b',
+    lineHeight: 18,
   },
   descriptionText: {
     fontSize: 14,
