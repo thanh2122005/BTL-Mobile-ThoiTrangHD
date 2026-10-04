@@ -111,6 +111,16 @@ export default function CartScreen() {
     setVoucherMsg({ text: res.message, isError: !res.success });
     if (res.success) setInputCode('');
   };
+  const isItemSelected = (item: any) => {
+    const itemKey = item.cartItemId || `${item.id}_${item.size || 'M'}_${item.color || 'default'}`;
+    return (
+      selectedItemIds.includes(itemKey) ||
+      (item.cartItemId && selectedItemIds.includes(item.cartItemId)) ||
+      selectedItemIds.includes(item.id)
+    );
+  };
+  const isAllSelected = cart.length > 0 && cart.every((it) => isItemSelected(it));
+
 
   
       
@@ -232,7 +242,7 @@ export default function CartScreen() {
                   style={styles.selectAllRow}
                   activeOpacity={0.7}
                   onPress={() => {
-                    if (selectedItemIds.length === cart.length && cart.length > 0) {
+                    if (isAllSelected) {
                       deselectAllItems();
                     } else {
                       selectAllItems();
@@ -240,9 +250,9 @@ export default function CartScreen() {
                   }}
                 >
                   <IconSymbol
-                    name={selectedItemIds.length === cart.length && cart.length > 0 ? "checkmark.circle.fill" : "circle"}
+                    name={isAllSelected ? "checkmark.circle.fill" : "circle"}
                     size={22}
-                    color={selectedItemIds.length === cart.length && cart.length > 0 ? "#16a34a" : "#9ca3af"}
+                    color={isAllSelected ? "#16a34a" : "#94a3b8"}
                   />
                   <Text style={styles.selectAllText}>
                     Chọn tất cả ({cart.length} sản phẩm)
@@ -268,9 +278,9 @@ export default function CartScreen() {
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       >
                         <IconSymbol
-                          name={selectedItemIds.includes(item.cartItemId || item.id) ? "checkmark.circle.fill" : "circle"}
+                          name={isItemSelected(item) ? "checkmark.circle.fill" : "circle"}
                           size={22}
-                          color={selectedItemIds.includes(item.cartItemId || item.id) ? "#16a34a" : "#cbd5e1"}
+                          color={isItemSelected(item) ? "#16a34a" : "#94a3b8"}
                         />
                       </TouchableOpacity>
 
@@ -1397,6 +1407,8 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   itemCheckbox: {
+    width: 28,
+    height: 28,
     marginRight: 10,
     justifyContent: 'center',
     alignItems: 'center',

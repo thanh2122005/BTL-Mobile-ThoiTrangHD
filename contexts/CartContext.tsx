@@ -93,8 +93,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
         if (saved) {
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed)) {
-            setItems(parsed);
-            setSelectedItemIds(parsed.map((it: CartItem) => it.cartItemId || it.id));
+            const sanitized = parsed.map((it: CartItem) => ({
+              ...it,
+              cartItemId: it.cartItemId || getCartItemId(it),
+            }));
+            setItems(sanitized);
+            setSelectedItemIds(sanitized.map((it: CartItem) => it.cartItemId!));
           }
         }
       } catch (e) {
@@ -218,14 +222,27 @@ export function CartProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const toggleSelectItem = (cartItemId: string) => {
-    setSelectedItemIds((prev) =>
-      prev.includes(cartItemId) ? prev.filter((id) => id !== cartItemId) : [...prev, cartItemId]
-    );
+  const toggleSelectItem = (cartItemIdOrId: string) => {
+    setSelectedItemIds((prev) => {
+      const matchedItem = items.find(
+        (i) => i.cartItemId === cartItemIdOrId || i.id === cartItemIdOrId || getCartItemId(i) === cartItemIdOrId
+      );
+      const keysToMatch = matchedItem
+        ? [matchedItem.cartItemId, matchedItem.id, getCartItemId(matchedItem)].filter(Boolean) as string[]
+        : [cartItemIdOrId];
+
+      const isCurrentlySelected = prev.some((id) => keysToMatch.includes(id));
+      if (isCurrentlySelected) {
+        return prev.filter((id) => !keysToMatch.includes(id));
+      } else {
+        const canonicalKey = matchedItem?.cartItemId || (matchedItem ? getCartItemId(matchedItem) : cartItemIdOrId);
+        return [...prev, canonicalKey];
+      }
+    });
   };
 
   const selectAllItems = () => {
-    setSelectedItemIds(items.map((i) => i.cartItemId || i.id));
+    setSelectedItemIds(items.map((i) => i.cartItemId || getCartItemId(i)));
   };
 
   const deselectAllItems = () => {
@@ -245,7 +262,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
   };
 
   // Selected items calculation
-  const selectedItems = items.filter((item) => selectedItemIds.includes(item.cartItemId || item.id));
+  const selectedItems = items.filter((item) => {
+    const keys = [item.cartItemId, item.id, getCartItemId(item)].filter(Boolean) as string[];
+    return keys.some((k) => selectedItemIds.includes(k));
+  });
 
   const selectedSubtotal = selectedItems.reduce(
     (sum, item) => sum + parsePrice(item.price) * item.quantity,

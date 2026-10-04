@@ -43,6 +43,9 @@ const MAPPING = {
   'bag.fill.badge.plus': 'add-shopping-cart',
   'checkmark': 'check',
   'checkmark.circle.fill': 'check-circle',
+  'checkmark.circle': 'check-circle-outline',
+  'circle': 'radio-button-unchecked',
+  'circle.fill': 'circle',
   'cube.box': 'inventory-2',
   'car': 'local-shipping',
   'doc.plaintext': 'receipt-long',
@@ -71,6 +74,8 @@ const MAPPING = {
   'ticket': 'confirmation-number',
   'ticket.fill': 'confirmation-number',
   'sparkles': 'auto-awesome',
+  'pencil': 'edit',
+  'headphones': 'headphones',
 } as IconMapping;
 
 /**
