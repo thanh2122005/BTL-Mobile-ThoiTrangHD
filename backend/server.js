@@ -75,6 +75,17 @@ const pool = mysql.createPool({
     } catch (e) {}
 
     try {
+      await pool.query("ALTER TABLE products ADD COLUMN variants TEXT NULL");
+      console.log('✅ Đã thêm cột `variants` vào bảng products.');
+    } catch (e) {}
+
+    try {
+      await pool.query("ALTER TABLE stock_imports ADD COLUMN size VARCHAR(20) NULL");
+      await pool.query("ALTER TABLE stock_imports ADD COLUMN color VARCHAR(50) NULL");
+      console.log('✅ Đã thêm cột `size` và `color` vào bảng stock_imports.');
+    } catch (e) {}
+
+    try {
       await pool.query(`
         CREATE TABLE IF NOT EXISTS stock_imports (
           id INT AUTO_INCREMENT PRIMARY KEY,
@@ -90,6 +101,17 @@ const pool = mysql.createPool({
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
       `);
       console.log('✅ Đã sẵn sàng bảng stock_imports.');
+      const [stockCheck] = await pool.query("SELECT COUNT(*) as count FROM stock_imports");
+      if (stockCheck[0].count === 0) {
+        await pool.query(`
+          INSERT INTO stock_imports (product_id, product_name, supplier_name, batch_code, quantity, cost_price, qc_passed, note, imported_at)
+          VALUES 
+          ('1', 'Áo Thun Cotton Basic HOTEL', 'Công ty Cổ phần Dệt May HD', 'LO-2026-XUAN-01', 100, 180000, 1, 'Lô xuất xưởng đạt chuẩn QC may công nghiệp 100 cái như 100', DATE_SUB(NOW(), INTERVAL 2 DAY)),
+          ('2', 'Áo Thun Nam Graphic Outcast', 'Xưởng may Việt Hưng', 'LO-2026-XUAN-02', 80, 210000, 1, 'Kiểm định đường may mũi chỉ và độ bền màu đạt 100%', DATE_SUB(NOW(), INTERVAL 1 DAY)),
+          ('3', 'Áo Sweater Nỉ Trơn Mint Pastel', 'Công ty Cổ phần Dệt May HD', 'LO-2026-XUAN-03', 60, 240000, 1, 'Đạt chuẩn vải nỉ chần bông không bai dão sau giặt', NOW())
+        `);
+        console.log('✅ Đã nạp 3 phiếu nhập kho mẫu vào stock_imports.');
+      }
     } catch (e) {}
 
 
@@ -109,7 +131,60 @@ const pool = mysql.createPool({
   }
 })();
 
-// Helper parse features JSON
+// Helper sinh ma trận biến thể chuẩn thời trang khớp chính xác với stock
+function generateDefaultVariants(category, totalStock, productId) {
+  const isShoe = category && category.toLowerCase().includes('giày');
+  const isAccessory = category && category.toLowerCase().includes('phụ kiện');
+
+  let sizes = ['S', 'M', 'L', 'XL'];
+  let colors = [
+    { name: 'Đen', code: '#000000' },
+    { name: 'Be', code: '#E5D3B3' },
+    { name: 'Xanh Navy', code: '#1A237E' },
+  ];
+
+  if (isShoe) {
+    sizes = ['38', '39', '40', '41', '42'];
+    colors = [
+      { name: 'Đen', code: '#000000' },
+      { name: 'Trắng', code: '#FFFFFF' },
+      { name: 'Xám', code: '#9E9E9E' },
+    ];
+  } else if (isAccessory) {
+    sizes = ['Freesize'];
+    colors = [
+      { name: 'Đen', code: '#000000' },
+      { name: 'Nâu', code: '#795548' },
+      { name: 'Bạc', code: '#C0C0C0' },
+    ];
+  }
+
+  const count = sizes.length * colors.length;
+  const baseQty = Math.floor(totalStock / count);
+  let remainder = totalStock - (baseQty * count);
+
+  const variants = [];
+  colors.forEach((col, cIdx) => {
+    sizes.forEach((sz, sIdx) => {
+      let qty = baseQty;
+      if (remainder > 0) {
+        qty += 1;
+        remainder -= 1;
+      }
+      variants.push({
+        size: sz,
+        color: col.name,
+        color_code: col.code,
+        stock: Math.max(0, qty),
+        sku: `${productId}-${sz}-${col.name.toUpperCase().replace(/\s+/g, '')}`,
+      });
+    });
+  });
+
+  return variants;
+}
+
+// Helper parse features and variants JSON
 const formatProduct = (p) => {
   let features = [];
   if (p.features) {
@@ -131,15 +206,32 @@ const formatProduct = (p) => {
     }
   }
 
+  const stock = p.stock !== undefined && p.stock !== null ? Number(p.stock) : 50;
+
+  // Lấy hoặc sinh ma trận biến thể
+  let variants = [];
+  if (p.variants) {
+    try {
+      variants = typeof p.variants === 'string' ? JSON.parse(p.variants) : p.variants;
+    } catch (e) {
+      variants = [];
+    }
+  }
+
+  if (!variants || variants.length === 0) {
+    variants = generateDefaultVariants(p.category, stock, p.id);
+  }
+
   return {
     ...p,
     price,
-    stock: p.stock !== undefined && p.stock !== null ? Number(p.stock) : 50,
+    stock, // LUÔN DÙNG TỒN KHO THỰC TẾ TỪ DB
     sold_count: p.sold_count !== undefined && p.sold_count !== null ? Number(p.sold_count) : 0,
     original_price: originalPrice,
     originalPrice: originalPrice,
     discount,
     features,
+    variants,
   };
 };
 
@@ -605,6 +697,29 @@ app.post('/api/orders', async (req, res) => {
         'UPDATE products SET stock = GREATEST(0, stock - ?), sold_count = sold_count + ? WHERE id = ?',
         [item.quantity, item.quantity, item.id]
       );
+
+      // Trừ tồn kho chi tiết theo Size và Màu sắc
+      if (item.size && item.color) {
+        try {
+          const [pRows] = await connection.query('SELECT variants FROM products WHERE id = ?', [item.id]);
+          if (pRows.length > 0 && pRows[0].variants) {
+            let vList = typeof pRows[0].variants === 'string' ? JSON.parse(pRows[0].variants) : pRows[0].variants;
+            let updated = false;
+            vList = vList.map(v => {
+              const matchSize = String(v.size) === String(item.size);
+              const matchColor = v.color === item.color || v.color_code === item.color;
+              if (matchSize && matchColor) {
+                updated = true;
+                return { ...v, stock: Math.max(0, (Number(v.stock) || 0) - item.quantity) };
+              }
+              return v;
+            });
+            if (updated) {
+              await connection.query('UPDATE products SET variants = ? WHERE id = ?', [JSON.stringify(vList), item.id]);
+            }
+          }
+        } catch (e) {}
+      }
     }
 
     await connection.commit();
@@ -1510,8 +1625,9 @@ app.post('/api/orders/:id/return', async (req, res) => {
 app.post('/api/admin/products/:id/import-stock', async (req, res) => {
   try {
     const productId = req.params.id;
-    const { supplier_name, batch_code, quantity, cost_price, qc_passed, note } = req.body;
+    const { supplier_name, batch_code, quantity, cost_price, qc_passed, note, size, color } = req.body;
     const qty = parseInt(quantity, 10);
+
     if (!qty || qty <= 0) {
       return res.status(400).json({ success: false, message: 'Số lượng nhập phải lớn hơn 0' });
     }
@@ -1521,14 +1637,65 @@ app.post('/api/admin/products/:id/import-stock', async (req, res) => {
       return res.status(404).json({ success: false, message: 'Không tìm thấy sản phẩm' });
     }
     const product = prods[0];
+    const currentStock = Number(product.stock) || 0;
+    const newStock = currentStock + qty;
 
-    // Cập nhật tăng số lượng tồn kho
-    await pool.query('UPDATE products SET stock = stock + ? WHERE id = ?', [qty, productId]);
+    // Lấy variants hiện tại hoặc sinh mới
+    let variants = [];
+    if (product.variants) {
+      try {
+        variants = typeof product.variants === 'string' ? JSON.parse(product.variants) : product.variants;
+      } catch (e) {
+        variants = [];
+      }
+    }
+    if (!variants || variants.length === 0) {
+      variants = generateDefaultVariants(product.category, currentStock, product.id);
+    }
+
+    const targetSize = size && size !== 'Tất cả size' && size !== 'ALL' ? size : null;
+    const targetColor = color && color !== 'Tất cả màu' && color !== 'ALL' ? color : null;
+
+    if (targetSize && targetColor) {
+      let found = false;
+      variants = variants.map(v => {
+        if (String(v.size) === String(targetSize) && (v.color === targetColor || v.color_code === targetColor)) {
+          found = true;
+          return { ...v, stock: (Number(v.stock) || 0) + qty };
+        }
+        return v;
+      });
+      if (!found) {
+        variants.push({
+          size: targetSize,
+          color: targetColor,
+          color_code: targetColor.startsWith('#') ? targetColor : '#000000',
+          stock: qty,
+          sku: `${productId}-${targetSize}-${targetColor.toUpperCase().replace(/\s+/g, '')}`,
+        });
+      }
+    } else {
+      // Phân bổ đều vào các size/màu
+      const perV = Math.max(1, Math.floor(qty / (variants.length || 1)));
+      let rem = qty;
+      variants = variants.map((v, idx) => {
+        const add = idx === variants.length - 1 ? rem : Math.min(rem, perV);
+        rem -= add;
+        return { ...v, stock: (Number(v.stock) || 0) + add };
+      });
+    }
+
+    // Cập nhật CẢ stock và variants vào bảng products
+    await pool.query('UPDATE products SET stock = ?, variants = ? WHERE id = ?', [
+      newStock,
+      JSON.stringify(variants),
+      productId,
+    ]);
 
     // Ghi nhận nhật ký nhập kho
     await pool.query(
-      `INSERT INTO stock_imports (product_id, product_name, supplier_name, batch_code, quantity, cost_price, qc_passed, note)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO stock_imports (product_id, product_name, supplier_name, batch_code, quantity, cost_price, qc_passed, note, size, color)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         productId,
         product.name,
@@ -1538,16 +1705,16 @@ app.post('/api/admin/products/:id/import-stock', async (req, res) => {
         cost_price ? parseInt(cost_price, 10) : 0,
         qc_passed !== undefined ? (qc_passed ? 1 : 0) : 1,
         note || 'Hàng may công nghiệp đạt chuẩn QC',
+        targetSize || 'Đồng bộ',
+        targetColor || 'Đồng bộ',
       ]
     );
 
-    const [updated] = await pool.query('SELECT stock FROM products WHERE id = ?', [productId]);
-    const newStock = updated[0]?.stock || 0;
-
     res.json({
       success: true,
-      message: `Đã nhập thêm ${qty} sản phẩm vào kho thành công!`,
+      message: `Đã nhập thêm +${qty} sản phẩm vào kho thành công! Tồn kho mới: ${newStock} cái.`,
       newStock,
+      variants,
     });
   } catch (err) {
     console.error('Lỗi nhập hàng vào kho:', err);

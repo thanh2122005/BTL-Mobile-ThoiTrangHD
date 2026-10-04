@@ -34,6 +34,22 @@ export default function ProductDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [selectedSize, setSelectedSize] = useState('M');
   const [selectedColor, setSelectedColor] = useState('#000000');
+
+  const colorName = useMemo(() => {
+    return selectedColor === '#000000' ? 'Đen' : selectedColor === '#E5D3B3' ? 'Be' : 'Xanh Navy';
+  }, [selectedColor]);
+
+  const activeVariant = useMemo(() => {
+    if (!product?.variants || !Array.isArray(product.variants)) return null;
+    return product.variants.find(
+      (v: any) =>
+        String(v.size) === String(selectedSize) &&
+        (v.color_code === selectedColor || v.color === colorName)
+    ) || null;
+  }, [product, selectedSize, selectedColor, colorName]);
+
+  const currentVariantStock = activeVariant !== null ? activeVariant.stock : (product?.stock || 0);
+  const isOutOfStock = currentVariantStock <= 0;
   const [showSizeGuide, setShowSizeGuide] = useState(false);
   const [calcHeight, setCalcHeight] = useState('168');
   const [calcWeight, setCalcWeight] = useState('62');
@@ -391,7 +407,7 @@ export default function ProductDetailScreen() {
 
             {/* Color options */}
             <View style={styles.optionSection}>
-              <Text style={styles.optionTitle}>MÀU SẮC</Text>
+              <Text style={styles.optionTitle}>MÀU SẮC: <Text style={{ color: "#000000", fontWeight: "800" }}>{colorName}</Text></Text>
               <View style={styles.colorOptions}>
                 {['#000000', '#E5D3B3', '#1A237E'].map((color) => (
                   <TouchableOpacity 
@@ -1214,7 +1230,67 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     paddingTop: 4,
   },
-    qualityCommitmentCard: {
+    sizeBoxSoldOut: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
+    opacity: 0.6,
+  },
+  sizeTextSoldOut: {
+    color: '#94a3b8',
+    textDecorationLine: 'line-through',
+  },
+  variantStockBox: {
+    marginTop: 10,
+  },
+  stockAlertRowIn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#f0fdf4',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+  },
+  stockAlertTextIn: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#15803d',
+  },
+  stockAlertRowLow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#fffbeb',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#fde68a',
+  },
+  stockAlertTextLow: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#b45309',
+  },
+  stockAlertRowOut: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#fef2f2',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  stockAlertTextOut: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#dc2626',
+  },
+  qualityCommitmentCard: {
     backgroundColor: '#f8fafc',
     borderRadius: 12,
     padding: 16,
