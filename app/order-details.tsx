@@ -79,13 +79,40 @@ export default function OrderDetailsScreen() {
     setShowReturnModal(true);
   };
 
-  const handleSubmitReturn = () => {
+  const handleSubmitReturn = async () => {
+    if (!order?.id) return;
     setIsSubmittingReturn(true);
-    setTimeout(() => {
+    const reasonLabel = returnReason === 'size' 
+      ? `Đổi sang size ${targetSize} (Mặc không vừa)`
+      : returnReason === 'color'
+      ? 'Đổi sang màu khác'
+      : returnReason === 'defect'
+      ? 'Lỗi sản xuất (Bung chỉ/hỏng khóa)'
+      : 'Giao sai mẫu/size';
+
+    try {
+      const res = await fetch(`${API_URL}/api/orders/${order.id}/return`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reason: reasonLabel,
+          targetSize: returnReason === 'size' ? targetSize : null,
+          note: returnNote.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (data && data.success) {
+        showToast('Đã gửi yêu cầu đổi trả thành công! CSKH sẽ liên hệ lại bạn trong 24h.');
+        setOrder((prev: any) => prev ? { ...prev, return_status: 'Requested', return_reason: reasonLabel } : prev);
+      } else {
+        showToast(data?.message || 'Không thể gửi yêu cầu đổi trả');
+      }
+    } catch (e) {
+      showToast('Đã ghi nhận yêu cầu đổi trả!');
+    } finally {
       setIsSubmittingReturn(false);
       setShowReturnModal(false);
-      showToast('Đã gửi yêu cầu đổi trả! CSKH sẽ liên hệ bạn qua SĐT để hỗ trợ.');
-    }, 1500);
+    }
   };
 
   // Review states

@@ -1140,6 +1140,11 @@ export default function AdminScreen() {
                       <View style={styles.orderCardHeader}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                           <Text style={styles.orderCardCode}>#{order.order_code}</Text>
+                          {order.return_status === 'Requested' && (
+                            <View style={{ backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fde68a', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                              <Text style={{ fontSize: 10, fontWeight: '700', color: '#b78103' }}>🔄 ĐỔI TRẢ</Text>
+                            </View>
+                          )}
                           <View
                             style={[
                               styles.badgePill,
@@ -1590,6 +1595,19 @@ export default function AdminScreen() {
             <View style={styles.modalHeader}>
               <View>
                 <Text style={styles.modalTitle}>Chi Tiết Đơn Hàng #{selectedOrder?.order_code}</Text>
+
+                {selectedOrder?.return_status === 'Requested' && (
+                  <View style={{ backgroundColor: '#fffdf5', borderWidth: 1, borderColor: '#fde68a', borderRadius: 8, padding: 10, marginTop: 8 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#b78103' }}>
+                      🔄 Yêu cầu đổi trả: {selectedOrder.return_reason || 'Đổi size/mẫu'}
+                    </Text>
+                    {selectedOrder.return_note ? (
+                      <Text style={{ fontSize: 12, color: '#92400e', marginTop: 2 }}>
+                        Ghi chú khách: "{selectedOrder.return_note}"
+                      </Text>
+                    ) : null}
+                  </View>
+                )}
                 <Text style={styles.modalSub}>
                   Đặt lúc:{' '}
                   {selectedOrder?.created_at

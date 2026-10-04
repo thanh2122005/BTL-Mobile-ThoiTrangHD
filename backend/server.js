@@ -59,7 +59,14 @@ const pool = mysql.createPool({
 
     try {
       await pool.query("ALTER TABLE orders ADD COLUMN cancel_reason VARCHAR(255) NULL");
-      console.log('✅ Đã thêm cột `cancel_reason` vào bảng orders.');
+    } catch (e) {}
+
+    try {
+      await pool.query("ALTER TABLE orders ADD COLUMN return_reason VARCHAR(255) NULL");
+      await pool.query("ALTER TABLE orders ADD COLUMN return_note TEXT NULL");
+      await pool.query("ALTER TABLE orders ADD COLUMN return_status VARCHAR(50) NULL");
+      await pool.query("ALTER TABLE orders ADD COLUMN return_target_size VARCHAR(20) NULL");
+      console.log('✅ Đã hỗ trợ các cột đổi trả bảo hành trong bảng orders.');
     } catch (e) {}
 
     try {
@@ -1462,6 +1469,23 @@ app.delete('/api/admin/vouchers/:code', async (req, res) => {
 });
 
 // Khởi động server
+
+// API tiếp nhận yêu cầu Đổi trả / Bảo hành
+app.post('/api/orders/:id/return', async (req, res) => {
+  try {
+    const orderId = req.params.id;
+    const { reason, targetSize, note } = req.body;
+    await pool.query(
+      "UPDATE orders SET return_reason = ?, return_target_size = ?, return_note = ?, return_status = 'Requested' WHERE id = ?",
+      [reason || 'Yêu cầu đổi trả', targetSize || null, note || null, orderId]
+    );
+    res.json({ success: true, message: 'Đã tiếp nhận yêu cầu đổi trả thành công' });
+  } catch (err) {
+    console.error('Lỗi tiếp nhận đổi trả:', err);
+    res.status(500).json({ success: false, message: 'Lỗi máy chủ khi ghi nhận đổi trả' });
+  }
+});
+
 app.listen(port, () => {
   console.log(`🚀 Backend Server (MySQL Connected) đang chạy tại: http://localhost:${port}`);
   console.log(`👉 API Danh sách sản phẩm: http://localhost:${port}/api/products`);
