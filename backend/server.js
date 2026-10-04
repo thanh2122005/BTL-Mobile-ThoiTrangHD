@@ -74,6 +74,25 @@ const pool = mysql.createPool({
       console.log('✅ Đã thêm cột `shipping_fee` vào bảng orders.');
     } catch (e) {}
 
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS stock_imports (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          product_id VARCHAR(50) NOT NULL,
+          product_name VARCHAR(255) NOT NULL,
+          supplier_name VARCHAR(255) NOT NULL,
+          batch_code VARCHAR(100) NOT NULL,
+          quantity INT NOT NULL,
+          cost_price INT NOT NULL DEFAULT 0,
+          qc_passed BOOLEAN DEFAULT 1,
+          note TEXT NULL,
+          imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+      `);
+      console.log('✅ Đã sẵn sàng bảng stock_imports.');
+    } catch (e) {}
+
+
     // Đảm bảo có tài khoản Admin chính thức
     const [adminCheck] = await pool.query("SELECT id FROM users WHERE email = 'admin@thoitranghd.com'");
     if (adminCheck.length === 0) {
@@ -1483,6 +1502,66 @@ app.post('/api/orders/:id/return', async (req, res) => {
   } catch (err) {
     console.error('Lỗi tiếp nhận đổi trả:', err);
     res.status(500).json({ success: false, message: 'Lỗi máy chủ khi ghi nhận đổi trả' });
+  }
+});
+
+
+// API Nhập thêm hàng vào kho (Inbound Stock Import & QC)
+app.post('/api/admin/products/:id/import-stock', async (req, res) => {
+  try {
+    const productId = req.params.id;
+    const { supplier_name, batch_code, quantity, cost_price, qc_passed, note } = req.body;
+    const qty = parseInt(quantity, 10);
+    if (!qty || qty <= 0) {
+      return res.status(400).json({ success: false, message: 'Số lượng nhập phải lớn hơn 0' });
+    }
+
+    const [prods] = await pool.query('SELECT * FROM products WHERE id = ?', [productId]);
+    if (prods.length === 0) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy sản phẩm' });
+    }
+    const product = prods[0];
+
+    // Cập nhật tăng số lượng tồn kho
+    await pool.query('UPDATE products SET stock = stock + ? WHERE id = ?', [qty, productId]);
+
+    // Ghi nhận nhật ký nhập kho
+    await pool.query(
+      `INSERT INTO stock_imports (product_id, product_name, supplier_name, batch_code, quantity, cost_price, qc_passed, note)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        productId,
+        product.name,
+        supplier_name || 'Công ty Cổ phần Dệt May HD',
+        batch_code || `LO-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+        qty,
+        cost_price ? parseInt(cost_price, 10) : 0,
+        qc_passed !== undefined ? (qc_passed ? 1 : 0) : 1,
+        note || 'Hàng may công nghiệp đạt chuẩn QC',
+      ]
+    );
+
+    const [updated] = await pool.query('SELECT stock FROM products WHERE id = ?', [productId]);
+    const newStock = updated[0]?.stock || 0;
+
+    res.json({
+      success: true,
+      message: `Đã nhập thêm ${qty} sản phẩm vào kho thành công!`,
+      newStock,
+    });
+  } catch (err) {
+    console.error('Lỗi nhập hàng vào kho:', err);
+    res.status(500).json({ success: false, message: 'Lỗi server khi nhập kho' });
+  }
+});
+
+// API Lấy lịch sử nhập kho
+app.get('/api/admin/stock-imports', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM stock_imports ORDER BY imported_at DESC LIMIT 50');
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Lỗi lấy lịch sử nhập kho' });
   }
 });
 

@@ -81,6 +81,68 @@ export default function AdminScreen() {
     description: '',
   });
 
+  // Inbound Stock Import Modal
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importProduct, setImportProduct] = useState<any | null>(null);
+  const [importForm, setImportForm] = useState({
+    supplier_name: 'Công ty Cổ phần Dệt May HD',
+    batch_code: 'LO-2026-XUAN-01',
+    quantity: '50',
+    cost_price: '180000',
+    qc_passed: true,
+    note: 'Hàng may công nghiệp đạt chuẩn QC',
+  });
+  const [isSubmittingImport, setIsSubmittingImport] = useState(false);
+
+  const handleOpenImportModal = (prod: any) => {
+    setImportProduct(prod);
+    setImportForm({
+      supplier_name: 'Công ty Cổ phần Dệt May HD',
+      batch_code: `LO-2026-${Math.floor(100 + Math.random() * 900)}`,
+      quantity: '50',
+      cost_price: '180000',
+      qc_passed: true,
+      note: 'Hàng xuất xưởng công nghiệp đạt chuẩn QC',
+    });
+    setShowImportModal(true);
+  };
+
+  const handleSubmitImport = async () => {
+    if (!importProduct) return;
+    const qty = parseInt(importForm.quantity, 10);
+    if (!qty || qty <= 0) {
+      showToast('Vui lòng nhập số lượng hợp lệ (> 0)');
+      return;
+    }
+    setIsSubmittingImport(true);
+    try {
+      const res = await fetch(`${API_URL}/api/admin/products/${importProduct.id}/import-stock`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          supplier_name: importForm.supplier_name.trim(),
+          batch_code: importForm.batch_code.trim(),
+          quantity: qty,
+          cost_price: parseInt(importForm.cost_price, 10) || 0,
+          qc_passed: importForm.qc_passed,
+          note: importForm.note.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (data && data.success) {
+        showToast(data.message || `Đã nhập thêm ${qty} cái vào kho thành công!`);
+        setShowImportModal(false);
+        fetchData();
+      } else {
+        showToast(data?.message || 'Lỗi nhập hàng vào kho');
+      }
+    } catch (err) {
+      showToast('Lỗi kết nối khi gửi phiếu nhập kho');
+    } finally {
+      setIsSubmittingImport(false);
+    }
+  };
+
   // Voucher Form
   const [showVoucherModal, setShowVoucherModal] = useState(false);
   const [voucherForm, setVoucherForm] = useState({
@@ -1384,7 +1446,26 @@ export default function AdminScreen() {
                         )}
                       </View>
 
+                      <View style={styles.productStockRow}>
+                        <View style={[styles.stockPill, (prod.stock || 0) <= 10 && styles.stockPillLow]}>
+                          <IconSymbol name="cube.box" size={12} color={(prod.stock || 0) <= 10 ? "#dc2626" : "#16a34a"} />
+                          <Text style={[styles.stockPillText, (prod.stock || 0) <= 10 && styles.stockPillTextLow]}>
+                            Kho: {prod.stock !== undefined ? prod.stock : 50} cái
+                          </Text>
+                        </View>
+                        <Text style={styles.soldCountText}>Đã bán: {prod.sold_count || 0}</Text>
+                      </View>
+
                       <View style={styles.productActionsRow}>
+                        <TouchableOpacity
+                          style={styles.importProdBtn}
+                          onPress={() => handleOpenImportModal(prod)}
+                          activeOpacity={0.8}
+                        >
+                          <IconSymbol name="plus" size={12} color="#15803d" />
+                          <Text style={styles.importProdBtnText}>Nhập kho</Text>
+                        </TouchableOpacity>
+
                         <TouchableOpacity
                           style={styles.editProdBtn}
                           onPress={() => handleOpenEditProduct(prod)}
@@ -1851,6 +1932,158 @@ export default function AdminScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* MODAL 3: INBOUND STOCK IMPORT & QC */}
+      <Modal visible={showImportModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, isDesktop && { maxWidth: 620 }]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={styles.importIconBadge}>
+                  <IconSymbol name="cube.box" size={16} color="#15803d" />
+                </View>
+                <Text style={styles.modalTitle}>Phiếu Nhập Hàng Vào Kho (Inbound QC)</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowImportModal(false)}>
+                <IconSymbol name="xmark" size={20} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 520, paddingHorizontal: 20, paddingVertical: 14 }}>
+              {/* Product Brief */}
+              {importProduct && (
+                <View style={styles.importProdBrief}>
+                  <Image source={getImageSource(importProduct.image)} style={styles.importProdThumb} contentFit="cover" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.importProdName} numberOfLines={1}>{importProduct.name}</Text>
+                    <Text style={styles.importProdMeta}>
+                      Mã SKU: #{importProduct.id} • Giá bán: {formatVND(importProduct.price)}
+                    </Text>
+                    <View style={styles.currentStockBadge}>
+                      <Text style={styles.currentStockText}>
+                        Tồn kho hiện tại: <Text style={{ fontWeight: '800', color: '#0f172a' }}>{importProduct.stock !== undefined ? importProduct.stock : 50} cái</Text>
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {/* Supplier Selection */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Nhà cung cấp / Xưởng may đối tác *</Text>
+                <View style={styles.supplierChipsRow}>
+                  {['Công ty Dệt May HD', 'Xưởng may Việt Hưng', 'Xưởng Minh Châu', 'Xưởng Quốc Tế'].map((sup) => (
+                    <TouchableOpacity
+                      key={sup}
+                      style={[styles.supplierChip, importForm.supplier_name === sup && styles.supplierChipActive]}
+                      onPress={() => setImportForm({ ...importForm, supplier_name: sup })}
+                    >
+                      <Text style={[styles.supplierChipText, importForm.supplier_name === sup && styles.supplierChipTextActive]}>
+                        {sup}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <TextInput
+                  style={styles.formInput}
+                  value={importForm.supplier_name}
+                  onChangeText={(v) => setImportForm({ ...importForm, supplier_name: v })}
+                  placeholder="Tên nhà cung cấp hoặc xưởng may"
+                />
+              </View>
+
+              {/* Batch Code */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Mã lô sản xuất (Batch No) *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={importForm.batch_code}
+                  onChangeText={(v) => setImportForm({ ...importForm, batch_code: v })}
+                  placeholder="VD: LO-2026-XUAN-01"
+                />
+              </View>
+
+              {/* Quantity & Cost Price */}
+              <View style={styles.formRow}>
+                <View style={[styles.formGroup, { flex: 1 }]}>
+                  <Text style={styles.formLabel}>Số lượng nhập thêm *</Text>
+                  <TextInput
+                    style={[styles.formInput, { fontWeight: '700', fontSize: 16, color: '#15803d' }]}
+                    keyboardType="numeric"
+                    value={importForm.quantity}
+                    onChangeText={(v) => setImportForm({ ...importForm, quantity: v })}
+                    placeholder="VD: 50"
+                  />
+                </View>
+
+                <View style={[styles.formGroup, { flex: 1 }]}>
+                  <Text style={styles.formLabel}>Giá vốn nhập kho (VNĐ)</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    keyboardType="numeric"
+                    value={importForm.cost_price}
+                    onChangeText={(v) => setImportForm({ ...importForm, cost_price: v })}
+                    placeholder="VD: 180000"
+                  />
+                </View>
+              </View>
+
+              {/* QC Quality Verification Checklist */}
+              <View style={styles.qcBox}>
+                <Text style={styles.qcBoxTitle}>TIÊU CHUẨN KIỂM ĐỊNH CHẤT LƯỢNG (QC INBOUND):</Text>
+                <TouchableOpacity
+                  style={styles.qcCheckItem}
+                  onPress={() => setImportForm({ ...importForm, qc_passed: !importForm.qc_passed })}
+                  activeOpacity={0.8}
+                >
+                  <View style={[styles.qcCheckbox, importForm.qc_passed && styles.qcCheckboxActive]}>
+                    {importForm.qc_passed && <IconSymbol name="checkmark" size={12} color="#ffffff" />}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.qcCheckTitle}>Đạt chuẩn dây chuyền công nghiệp ("100 cái như 100")</Text>
+                    <Text style={styles.qcCheckDesc}>
+                      Kiểm định 5-10% số lượng: Đường may kỹ càng, khóa kéo trơn tru, khuy bấm chắc chắn, vải chuẩn định lượng không bai xù.
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
+
+              {/* Note */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Ghi chú đợt nhập hàng</Text>
+                <TextInput
+                  style={[styles.formInput, { minHeight: 48 }]}
+                  value={importForm.note}
+                  onChangeText={(v) => setImportForm({ ...importForm, note: v })}
+                  placeholder="Ghi chú thêm về lô hàng nhập..."
+                  multiline
+                />
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setShowImportModal(false)}
+              >
+                <Text style={styles.modalCancelBtnText}>Hủy bỏ</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalSubmitBtn, { backgroundColor: '#15803d' }]}
+                onPress={handleSubmitImport}
+                disabled={isSubmittingImport}
+              >
+                {isSubmittingImport ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={styles.modalSubmitBtnText}>XÁC NHẬN NHẬP KHO</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
 
       {/* MODAL 3: CREATE VOUCHER */}
       <Modal visible={showVoucherModal} transparent animationType="slide">
@@ -2927,6 +3160,177 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#dc2626',
   },
+
+  productStockRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  stockPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#dcfce7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  stockPillLow: {
+    backgroundColor: '#fee2e2',
+  },
+  stockPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#15803d',
+  },
+  stockPillTextLow: {
+    color: '#b91c1c',
+  },
+  soldCountText: {
+    fontSize: 11,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  importProdBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#f0fdf4',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+  },
+  importProdBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#15803d',
+  },
+  importIconBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 6,
+    backgroundColor: '#dcfce7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  importProdBrief: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 12,
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginBottom: 16,
+  },
+  importProdThumb: {
+    width: 52,
+    height: 52,
+    borderRadius: 8,
+    backgroundColor: '#e2e8f0',
+  },
+  importProdName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginBottom: 2,
+  },
+  importProdMeta: {
+    fontSize: 12,
+    color: '#64748b',
+    marginBottom: 4,
+  },
+  currentStockBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+  },
+  currentStockText: {
+    fontSize: 11,
+    color: '#475569',
+  },
+  supplierChipsRow: {
+    flexDirection: 'row',
+    gap: 6,
+    flexWrap: 'wrap',
+    marginBottom: 8,
+  },
+  supplierChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  supplierChipActive: {
+    backgroundColor: '#0f172a',
+    borderColor: '#0f172a',
+  },
+  supplierChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  supplierChipTextActive: {
+    color: '#ffffff',
+  },
+  qcBox: {
+    backgroundColor: '#f0fdf4',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    marginBottom: 14,
+  },
+  qcBoxTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#166534',
+    marginBottom: 8,
+  },
+  qcCheckItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  qcCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: '#16a34a',
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  qcCheckboxActive: {
+    backgroundColor: '#16a34a',
+  },
+  qcCheckTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#14532d',
+    marginBottom: 2,
+  },
+  qcCheckDesc: {
+    fontSize: 11,
+    color: '#166534',
+    lineHeight: 16,
+  },
+
 
   /* USERS */
   userListContainer: {
