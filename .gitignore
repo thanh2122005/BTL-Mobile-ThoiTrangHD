@@ -41,3 +41,8 @@ app-example
 # generated native folders
 /ios
 /android
+
+# Office temporary lock files
+~$*.docx
+~$*.xlsx
+~$*.pptx

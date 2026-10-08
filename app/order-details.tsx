@@ -18,6 +18,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { API_URL } from '@/constants/config';
 import { useResponsive } from '@/hooks/useResponsive';
+import { useAuth } from '@/contexts/AuthContext';
 
 import { getImageSource } from '@/constants/images';
 
@@ -54,12 +55,15 @@ interface OrderDetail {
 
 export default function OrderDetailsScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const { isMobile, isLargeScreen } = useResponsive();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showConfirmReceiptModal, setShowConfirmReceiptModal] = useState(false);
+  const [isConfirmingReceipt, setIsConfirmingReceipt] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
 
   // Return / Warranty states
@@ -117,6 +121,8 @@ export default function OrderDetailsScreen() {
 
   // Review states
   const [reviewedProductIds, setReviewedProductIds] = useState<string[]>([]);
+  const [reviewsMap, setReviewsMap] = useState<Record<string, any>>({});
+  const [isEditingReview, setIsEditingReview] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [reviewingItem, setReviewingItem] = useState<OrderItem | null>(null);
   const [reviewRating, setReviewRating] = useState(5);
@@ -131,10 +137,17 @@ export default function OrderDetailsScreen() {
     }, 2500);
   };
 
-  const handleOpenReviewModal = (item: OrderItem) => {
+  const handleOpenReviewModal = (item: OrderItem, isEdit: boolean = false) => {
     setReviewingItem(item);
-    setReviewRating(5);
-    setReviewComment('');
+    setIsEditingReview(isEdit);
+    const existing = reviewsMap[String(item.product_id)];
+    if (isEdit && existing) {
+      setReviewRating(Number(existing.rating) || 5);
+      setReviewComment(existing.comment || '');
+    } else {
+      setReviewRating(5);
+      setReviewComment('');
+    }
     setShowReviewModal(true);
   };
 
@@ -148,33 +161,70 @@ export default function OrderDetailsScreen() {
     setIsSubmittingReview(true);
     try {
       const colorName = reviewingItem.color === '#000000' ? 'Đen' : reviewingItem.color || 'Tiêu chuẩn';
+      const method = isEditingReview ? 'PUT' : 'POST';
+      const payload = isEditingReview ? {
+        userId: order?.user_id,
+        rating: reviewRating,
+        comment: reviewComment.trim(),
+      } : {
+        userId: order?.user_id || null,
+        userName: order?.customer_name || 'Khách hàng',
+        rating: reviewRating,
+        comment: reviewComment.trim(),
+        orderId: order?.id,
+        size: reviewingItem.size || 'M',
+        color: colorName,
+      };
+
       const res = await fetch(`${API_URL}/api/products/${reviewingItem.product_id}/reviews`, {
-        method: 'POST',
+        method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: order?.user_id || null,
-          userName: order?.customer_name || 'Khách hàng',
-          rating: reviewRating,
-          comment: reviewComment.trim(),
-          orderId: order?.id,
-          size: reviewingItem.size || 'M',
-          color: colorName,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
       if (data && data.success) {
-        setReviewedProductIds(prev => [...prev, String(reviewingItem.product_id)]);
+        showToast(isEditingReview ? 'Cập nhật đánh giá thành công!' : 'Cảm ơn bạn đã đánh giá sản phẩm!');
+        if (!reviewedProductIds.includes(String(reviewingItem.product_id))) {
+          setReviewedProductIds(prev => [...prev, String(reviewingItem.product_id)]);
+        }
+        setReviewsMap(prev => ({
+          ...prev,
+          [String(reviewingItem.product_id)]: data.data || { rating: reviewRating, comment: reviewComment.trim() }
+        }));
         setShowReviewModal(false);
-        showToast('Cảm ơn bạn đã đánh giá sản phẩm!');
       } else {
         showToast(data?.message || 'Không thể gửi đánh giá');
       }
     } catch (e) {
-      console.error('Lỗi gửi đánh giá đơn hàng:', e);
+      console.error('Lỗi gửi/sửa đánh giá đơn hàng:', e);
       showToast('Lỗi kết nối khi gửi đánh giá');
     } finally {
       setIsSubmittingReview(false);
+    }
+  };
+
+  const handleConfirmReceipt = async () => {
+    if (!order) return;
+    setIsConfirmingReceipt(true);
+    try {
+      const res = await fetch(`${API_URL}/api/orders/${order.id}/confirm-receipt`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user?.id || order.user_id })
+      });
+      const data = await res.json();
+      if (data && data.success) {
+        setOrder(prev => prev ? { ...prev, status: 'Completed' } : null);
+        setShowConfirmReceiptModal(false);
+        showToast('Đã hoàn tất đơn hàng! Bạn có thể đánh giá sản phẩm hoặc yêu cầu đổi trả.');
+      } else {
+        showToast(data?.message || 'Không thể xác nhận nhận hàng');
+      }
+    } catch (e) {
+      showToast('Lỗi kết nối khi xác nhận nhận hàng');
+    } finally {
+      setIsConfirmingReceipt(false);
     }
   };
 
@@ -184,14 +234,23 @@ export default function OrderDetailsScreen() {
     try {
       const res = await fetch(`${API_URL}/api/orders/${order.id}/cancel`, {
         method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          cancelReason: 'Khách hàng yêu cầu hủy đơn',
+        }),
       });
       const data = await res.json();
       if (data && data.success) {
-        setOrder({ ...order, status: 'Cancelled' });
+        setOrder({ ...order, status: 'Cancelled', cancel_reason: 'Khách hàng yêu cầu hủy đơn' });
         setShowCancelModal(false);
+      } else {
+        alert(data?.message || 'Không thể hủy đơn hàng');
       }
     } catch (e) {
       console.error('Lỗi hủy đơn:', e);
+      alert('Có lỗi xảy ra khi gửi yêu cầu hủy đơn');
     } finally {
       setIsCancelling(false);
     }
@@ -223,6 +282,7 @@ export default function OrderDetailsScreen() {
             .then(revData => {
               if (revData && revData.success && Array.isArray(revData.data)) {
                 setReviewedProductIds(revData.data);
+                if (revData.reviews) setReviewsMap(revData.reviews);
               }
             })
             .catch(() => {});
@@ -433,12 +493,24 @@ export default function OrderDetailsScreen() {
                             <Text style={styles.itemPrice}>{formatVND(item.price)}</Text>
                             <Text style={styles.itemQty}>x{item.quantity}</Text>
                           </View>
-                          {order.status !== 'Cancelled' && (
+                          {(order.status?.toLowerCase() === 'completed') && (
                             <View style={styles.itemActionRow}>
                               {reviewedProductIds.includes(String(item.product_id)) ? (
-                                <View style={styles.itemReviewedBadge}>
-                                  <IconSymbol name="checkmark" size={11} color="#16a34a" />
-                                  <Text style={styles.itemReviewedText}>Đã đánh giá</Text>
+                                <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                                  <TouchableOpacity
+                                    style={[styles.itemReviewBtn, { borderColor: '#b78103', backgroundColor: '#fffbeb' }]}
+                                    onPress={() => handleOpenReviewModal(item, true)}
+                                  >
+                                    <IconSymbol name="pencil" size={12} color="#b78103" />
+                                    <Text style={[styles.itemReviewBtnText, { color: '#b78103' }]}>Sửa đánh giá</Text>
+                                  </TouchableOpacity>
+                                  <TouchableOpacity
+                                    style={styles.itemReturnBtn}
+                                    onPress={() => handleOpenReturnModal(item)}
+                                  >
+                                    <IconSymbol name="tag" size={12} color="#b78103" />
+                                    <Text style={styles.itemReturnBtnText}>Đổi trả</Text>
+                                  </TouchableOpacity>
                                 </View>
                               ) : (
                                 <>
@@ -517,6 +589,17 @@ export default function OrderDetailsScreen() {
                   </View>
                 </View>
 
+                {order.status?.toLowerCase() === 'processing' && (
+                  <TouchableOpacity 
+                    style={styles.confirmReceiptBtn}
+                    onPress={() => setShowConfirmReceiptModal(true)}
+                    activeOpacity={0.85}
+                  >
+                    <IconSymbol name="checkmark.seal.fill" size={18} color="#ffffff" />
+                    <Text style={styles.confirmReceiptBtnText}>ĐÃ NHẬN ĐƯỢC HÀNG</Text>
+                  </TouchableOpacity>
+                )}
+
                 {order.status?.toLowerCase() === 'pending' && (
                   <TouchableOpacity 
                     style={styles.cancelOrderBtn}
@@ -548,6 +631,17 @@ export default function OrderDetailsScreen() {
           <View style={{ height: 100 }} />
         </ScrollView>
       )}
+
+      {/* Confirm Receipt Modal */}
+      <ConfirmModal
+        visible={showConfirmReceiptModal}
+        title="Xác nhận nhận hàng"
+        message="Bạn xác nhận đã nhận được gói hàng đầy đủ và muốn hoàn tất đơn hàng này?"
+        confirmText="ĐÃ NHẬN ĐỦ HÀNG"
+        cancelText="CHƯA NHẬN"
+        onConfirm={handleConfirmReceipt}
+        onCancel={() => setShowConfirmReceiptModal(false)}
+      />
 
       {/* Cancel Order Confirm Modal */}
       <ConfirmModal
@@ -719,7 +813,7 @@ export default function OrderDetailsScreen() {
           />
           <View style={styles.reviewModalCard}>
             <View style={styles.reviewModalHeader}>
-              <Text style={styles.reviewModalTitle}>Đánh giá sản phẩm đã mua</Text>
+              <Text style={styles.reviewModalTitle}>{isEditingReview ? 'Chỉnh sửa đánh giá của bạn' : 'Đánh giá sản phẩm đã mua'}</Text>
               <TouchableOpacity
                 onPress={() => setShowReviewModal(false)}
                 style={styles.reviewModalClose}
@@ -794,7 +888,7 @@ export default function OrderDetailsScreen() {
                 {isSubmittingReview ? (
                   <ActivityIndicator size="small" color="#ffffff" />
                 ) : (
-                  <Text style={styles.submitReviewText}>Gửi đánh giá</Text>
+                  <Text style={styles.submitReviewText}>{isEditingReview ? 'Cập nhật đánh giá' : 'Gửi đánh giá'}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -1116,6 +1210,27 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '500',
     color: '#000000',
+  },
+  confirmReceiptBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#15803d',
+    paddingVertical: 14,
+    borderRadius: 8,
+    gap: 8,
+    marginTop: 8,
+    elevation: 2,
+    shadowColor: '#15803d',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  confirmReceiptBtnText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   cancelOrderBtn: {
     backgroundColor: '#fee2e2',

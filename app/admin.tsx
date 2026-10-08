@@ -24,7 +24,7 @@ import { getImageSource } from '@/constants/images';
 const formatVND = (num: number) =>
   new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(num || 0);
 
-type AdminTab = 'overview' | 'orders' | 'products' | 'inventory' | 'users' | 'vouchers';
+type AdminTab = 'overview' | 'orders' | 'returns' | 'products' | 'inventory' | 'users' | 'vouchers';
 type OrderStatus = 'Pending' | 'Processing' | 'Completed' | 'Cancelled';
 
 export default function AdminScreen() {
@@ -58,6 +58,12 @@ export default function AdminScreen() {
   const [users, setUsers] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [vouchers, setVouchers] = useState<any[]>([]);
+  // Returns & Claims Ticket states
+  const [returnTickets, setReturnTickets] = useState<any[]>([]);
+  const [returnStats, setReturnStats] = useState({ total: 0, requested: 0, approved: 0, rejected: 0 });
+  const [returnStatusFilter, setReturnStatusFilter] = useState<string>('ALL');
+  const [returnSearch, setReturnSearch] = useState('');
+  const [isUpdatingReturn, setIsUpdatingReturn] = useState<number | null>(null);
   const [stockImports, setStockImports] = useState<any[]>([]);
   const [stockSearch, setStockSearch] = useState('');
   const [selectedStockImport, setSelectedStockImport] = useState<any | null>(null);
@@ -71,6 +77,8 @@ export default function AdminScreen() {
   const [productSearch, setProductSearch] = useState('');
   const [productCategoryFilter, setProductCategoryFilter] = useState('ALL');
   const [updatingOrderId, setUpdatingOrderId] = useState<number | null>(null);
+  const [autoProgressionEnabled, setAutoProgressionEnabled] = useState(true);
+  const [isBulkConfirming, setIsBulkConfirming] = useState(false);
 
   // Modals
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
@@ -181,13 +189,14 @@ export default function AdminScreen() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [statsRes, ordersRes, usersRes, prodRes, voucherRes, stockRes] = await Promise.all([
+      const [statsRes, ordersRes, usersRes, prodRes, voucherRes, stockRes, returnsRes] = await Promise.all([
         fetch(`${API_URL}/api/admin/stats`).then((r) => r.json()).catch(() => null),
         fetch(`${API_URL}/api/admin/orders`).then((r) => r.json()).catch(() => null),
         fetch(`${API_URL}/api/admin/users`).then((r) => r.json()).catch(() => null),
         fetch(`${API_URL}/api/products`).then((r) => r.json()).catch(() => null),
         fetch(`${API_URL}/api/admin/vouchers`).then((r) => r.json()).catch(() => null),
         fetch(`${API_URL}/api/admin/stock-imports`).then((r) => r.json()).catch(() => null),
+        fetch(`${API_URL}/api/admin/returns`).then((r) => r.json()).catch(() => null),
       ]);
 
       if (statsRes && statsRes.success) setStats(statsRes.data);
@@ -196,6 +205,10 @@ export default function AdminScreen() {
       if (prodRes && prodRes.success) setProducts(prodRes.data || []);
       if (voucherRes && voucherRes.success) setVouchers(voucherRes.data || []);
       if (stockRes && stockRes.success) setStockImports(stockRes.data || []);
+      if (returnsRes && returnsRes.success) {
+        setReturnTickets(returnsRes.data || []);
+        if (returnsRes.stats) setReturnStats(returnsRes.stats);
+      }
     } catch (err) {
       console.error('Lỗi tải dữ liệu quản trị:', err);
       showToast('Lỗi kết nối máy chủ quản trị');
@@ -206,12 +219,106 @@ export default function AdminScreen() {
   };
 
   useEffect(() => {
+    fetch(`${API_URL}/api/admin/auto-progression`)
+      .then((r) => r.json())
+      .then((d) => { if (d && d.success) setAutoProgressionEnabled(d.enabled); })
+      .catch(() => null);
     fetchData();
   }, []);
 
   const handleRefresh = () => {
     setRefreshing(true);
     fetchData();
+  };
+
+  // Auto Progression & Bulk Handlers
+  const handleToggleAutoProgression = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/admin/auto-progression`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: !autoProgressionEnabled }),
+      });
+      const d = await res.json();
+      if (d && d.success) {
+        setAutoProgressionEnabled(d.enabled);
+        showToast(d.message || (d.enabled ? 'Đã bật tự động duyệt đơn' : 'Đã tắt tự động duyệt đơn'));
+      }
+    } catch (e) {
+      showToast('Lỗi khi đổi chế độ tự động');
+    }
+  };
+
+  const handleBulkConfirmOrders = async () => {
+    setIsBulkConfirming(true);
+    try {
+      const res = await fetch(`${API_URL}/api/admin/orders/bulk-confirm`, { method: 'POST' });
+      const d = await res.json();
+      if (d && d.success) {
+        showToast(d.message || 'Đã duyệt toàn bộ đơn chờ!');
+        fetchData();
+      }
+    } catch (e) {
+      showToast('Lỗi khi duyệt hàng loạt');
+    } finally {
+      setIsBulkConfirming(false);
+    }
+  };
+
+  const handleFastCompleteOrder = async (orderId: number) => {
+    try {
+      const res = await fetch(`${API_URL}/api/admin/orders/${orderId}/fast-complete`, { method: 'PUT' });
+      const d = await res.json();
+      if (d && d.success) {
+        showToast(`Đã hoàn tất đơn #${orderId}!`);
+        fetchData();
+        if (selectedOrder && selectedOrder.id === orderId) {
+          setSelectedOrder((prev: any) => ({ ...prev, status: 'Completed' }));
+        }
+      }
+    } catch (e) {
+      showToast('Lỗi khi hoàn tất đơn');
+    }
+  };
+
+  // Return Status Update
+  const handleUpdateReturnStatus = async (orderId: number, returnStatus: 'Approved' | 'Rejected') => {
+    setIsUpdatingReturn(orderId);
+    try {
+      const res = await fetch(`${API_URL}/api/admin/orders/${orderId}/return-status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ return_status: returnStatus }),
+      });
+      const data = await res.json();
+      if (data && data.success) {
+        showToast(returnStatus === 'Approved' ? 'Đã phê duyệt yêu cầu đổi trả thành công!' : 'Đã từ chối yêu cầu đổi trả!');
+        setOrders((prev) =>
+          prev.map((o) => (o.id === orderId ? { ...o, return_status: returnStatus } : o))
+        );
+        setReturnTickets((prev) =>
+          prev.map((t) => (t.id === orderId ? { ...t, return_status: returnStatus } : t))
+        );
+        fetch(`${API_URL}/api/admin/returns`)
+          .then((r) => r.json())
+          .then((d) => {
+            if (d && d.success) {
+              setReturnTickets(d.data || []);
+              if (d.stats) setReturnStats(d.stats);
+            }
+          })
+          .catch(() => {});
+        if (selectedOrder && selectedOrder.id === orderId) {
+          setSelectedOrder((prev: any) => ({ ...prev, return_status: returnStatus }));
+        }
+      } else {
+        showToast(data?.message || 'Lỗi khi cập nhật đổi trả');
+      }
+    } catch (e) {
+      showToast('Lỗi kết nối khi cập nhật đổi trả');
+    } finally {
+      setIsUpdatingReturn(null);
+    }
   };
 
   // Order Status Update
@@ -590,6 +697,24 @@ export default function AdminScreen() {
     return max > 0 ? max : 1000000;
   }, [stats.dailyRevenue]);
 
+  // Filtered return tickets memo
+  const filteredReturnTickets = useMemo(() => {
+    return returnTickets.filter((ticket) => {
+      if (returnStatusFilter !== 'ALL' && ticket.return_status !== returnStatusFilter) {
+        return false;
+      }
+      if (returnSearch.trim()) {
+        const q = returnSearch.toLowerCase();
+        const matchCode = ticket.order_code?.toLowerCase().includes(q);
+        const matchName = (ticket.customer_name || ticket.user_name || '')?.toLowerCase().includes(q);
+        const matchPhone = ticket.customer_phone?.toLowerCase().includes(q);
+        const matchReason = ticket.return_reason?.toLowerCase().includes(q);
+        if (!matchCode && !matchName && !matchPhone && !matchReason) return false;
+      }
+      return true;
+    });
+  }, [returnTickets, returnStatusFilter, returnSearch]);
+
   const tabsList = [
     { key: 'overview', label: 'Tổng quan & Báo cáo', icon: 'square.grid.2x2' },
     {
@@ -598,6 +723,13 @@ export default function AdminScreen() {
       icon: 'cube.box',
       badge: stats.pendingOrders > 0 ? `${stats.pendingOrders}` : `${orders.length}`,
       badgeAlert: stats.pendingOrders > 0,
+    },
+    {
+      key: 'returns',
+      label: 'Đổi Trả & Bảo Hành',
+      icon: 'arrow.2.squarepath',
+      badge: returnStats.requested > 0 ? `${returnStats.requested}` : (returnStats.total > 0 ? `${returnStats.total}` : undefined),
+      badgeAlert: returnStats.requested > 0,
     },
     {
       key: 'products',
@@ -1080,7 +1212,7 @@ export default function AdminScreen() {
                             </Text>
                           </View>
                           <Image
-                            source={{ uri: tp.image }}
+                            source={getImageSource(tp.image)}
                             style={styles.topProdThumb}
                             contentFit="cover"
                           />
@@ -1178,6 +1310,74 @@ export default function AdminScreen() {
                       <IconSymbol name="trash" size={15} color="#94a3b8" />
                     </TouchableOpacity>
                   ) : null}
+                </View>
+
+                {/* Automation & Quick Action Bar */}
+                <View style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  backgroundColor: '#f8fafc',
+                  borderWidth: 1,
+                  borderColor: '#e2e8f0',
+                  borderRadius: 10,
+                  padding: 10,
+                  marginTop: 10,
+                  marginBottom: 10,
+                  gap: 10,
+                  flexWrap: 'wrap'
+                }}>
+                  <TouchableOpacity
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 6,
+                      backgroundColor: autoProgressionEnabled ? '#ecfdf5' : '#f1f5f9',
+                      borderWidth: 1,
+                      borderColor: autoProgressionEnabled ? '#a7f3d0' : '#cbd5e1',
+                      paddingHorizontal: 12,
+                      paddingVertical: 7,
+                      borderRadius: 20
+                    }}
+                    onPress={handleToggleAutoProgression}
+                    activeOpacity={0.8}
+                  >
+                    <IconSymbol 
+                      name="bolt.fill" 
+                      size={14} 
+                      color={autoProgressionEnabled ? '#15803d' : '#64748b'} 
+                    />
+                    <Text style={{ 
+                      fontSize: 12, 
+                      fontWeight: '700', 
+                      color: autoProgressionEnabled ? '#15803d' : '#64748b' 
+                    }}>
+                      Tự động hóa tiến trình: {autoProgressionEnabled ? 'ĐANG BẬT' : 'ĐANG TẮT'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {stats.pendingOrders > 0 && (
+                    <TouchableOpacity
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 6,
+                        backgroundColor: '#1e293b',
+                        paddingHorizontal: 12,
+                        paddingVertical: 7,
+                        borderRadius: 20,
+                        opacity: isBulkConfirming ? 0.7 : 1
+                      }}
+                      onPress={handleBulkConfirmOrders}
+                      disabled={isBulkConfirming}
+                      activeOpacity={0.8}
+                    >
+                      <IconSymbol name="checkmark.circle.fill" size={14} color="#ffffff" />
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: '#ffffff' }}>
+                        Duyệt tất cả {stats.pendingOrders} đơn chờ
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
 
                 {/* Filter Status Chips */}
@@ -1394,6 +1594,286 @@ export default function AdminScreen() {
                             </>
                           )}
                         </View>
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </View>
+          )}
+
+          {/* TAB: RETURNS & CLAIMS MANAGEMENT (TICKETS ĐỔI TRẢ & BẢO HÀNH) */}
+          {activeTab === 'returns' && (
+            <View style={styles.tabContent}>
+              {/* 4 Metric Cards */}
+              <View style={styles.metricsGrid}>
+                <View style={styles.metricCard}>
+                  <View style={styles.metricIconWrap}>
+                    <IconSymbol name="arrow.2.squarepath" size={20} color="#0f172a" />
+                  </View>
+                  <Text style={styles.metricValue}>{returnStats.total}</Text>
+                  <Text style={styles.metricLabel}>Tổng Yêu Cầu</Text>
+                  <Text style={styles.metricSub}>Toàn bộ tickets phát sinh</Text>
+                </View>
+
+                <View style={[styles.metricCard, { borderLeftWidth: 3, borderLeftColor: '#f59e0b' }]}>
+                  <View style={[styles.metricIconWrap, { backgroundColor: '#fffbeb' }]}>
+                    <IconSymbol name="bell" size={20} color="#d97706" />
+                  </View>
+                  <Text style={[styles.metricValue, { color: '#d97706' }]}>{returnStats.requested}</Text>
+                  <Text style={styles.metricLabel}>Chờ Xử Lý</Text>
+                  <Text style={[styles.metricSub, { color: returnStats.requested > 0 ? '#b45309' : '#64748b', fontWeight: '600' }]}>
+                    {returnStats.requested > 0 ? 'Cần duyệt ngay' : 'Đã xử lý xong'}
+                  </Text>
+                </View>
+
+                <View style={[styles.metricCard, { borderLeftWidth: 3, borderLeftColor: '#10b981' }]}>
+                  <View style={[styles.metricIconWrap, { backgroundColor: '#ecfdf5' }]}>
+                    <IconSymbol name="checkmark.seal" size={20} color="#059669" />
+                  </View>
+                  <Text style={[styles.metricValue, { color: '#059669' }]}>{returnStats.approved}</Text>
+                  <Text style={styles.metricLabel}>Đã Chấp Thuận</Text>
+                  <Text style={styles.metricSub}>Thu hồi & cấp đổi mới</Text>
+                </View>
+
+                <View style={[styles.metricCard, { borderLeftWidth: 3, borderLeftColor: '#f43f5e' }]}>
+                  <View style={[styles.metricIconWrap, { backgroundColor: '#fff1f2' }]}>
+                    <IconSymbol name="minus" size={20} color="#e11d48" />
+                  </View>
+                  <Text style={[styles.metricValue, { color: '#e11d48' }]}>{returnStats.rejected}</Text>
+                  <Text style={styles.metricLabel}>Đã Từ Chối</Text>
+                  <Text style={styles.metricSub}>Không đủ điều kiện</Text>
+                </View>
+              </View>
+
+              {/* Controls Card: Search & Filter */}
+              <View style={styles.controlsCard}>
+                <View style={styles.searchBar}>
+                  <IconSymbol name="magnifyingglass" size={17} color="#94a3b8" />
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="Tìm theo mã đơn (#HD...), tên khách, SĐT, lý do..."
+                    value={returnSearch}
+                    onChangeText={setReturnSearch}
+                    placeholderTextColor="#94a3b8"
+                  />
+                  {returnSearch.length > 0 && (
+                    <TouchableOpacity onPress={() => setReturnSearch('')}>
+                      <IconSymbol name="xmark" size={14} color="#94a3b8" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+                  {[
+                    { key: 'ALL', label: `Tất Cả (${returnStats.total})` },
+                    { key: 'Requested', label: `Chờ Duyệt (${returnStats.requested})` },
+                    { key: 'Approved', label: `Đã Chấp Thuận (${returnStats.approved})` },
+                    { key: 'Rejected', label: `Đã Từ Chối (${returnStats.rejected})` },
+                  ].map((chip) => {
+                    const isSelected = returnStatusFilter === chip.key;
+                    return (
+                      <TouchableOpacity
+                        key={chip.key}
+                        style={[styles.filterChip, isSelected && styles.filterChipActive]}
+                        onPress={() => setReturnStatusFilter(chip.key)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.filterChipText, isSelected && styles.filterChipTextActive]}>
+                          {chip.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+
+              {/* Ticket Cards List */}
+              {filteredReturnTickets.length === 0 ? (
+                <View style={styles.emptyCard}>
+                  <IconSymbol name="arrow.2.squarepath" size={48} color="#cbd5e1" />
+                  <Text style={styles.emptyTitle}>Không có yêu cầu đổi trả nào</Text>
+                  <Text style={styles.emptySub}>
+                    {returnSearch ? 'Không tìm thấy ticket nào khớp với từ khóa tìm kiếm' : 'Hiện tại chưa phát sinh yêu cầu đổi trả nào từ khách hàng'}
+                  </Text>
+                </View>
+              ) : (
+                filteredReturnTickets.map((ticket) => {
+                  const isPending = ticket.return_status === 'Requested';
+                  const isApproved = ticket.return_status === 'Approved';
+                  const isRejected = ticket.return_status === 'Rejected';
+                  const isUpdatingThis = isUpdatingReturn === ticket.id;
+
+                  return (
+                    <View key={ticket.id} style={styles.returnTicketCard}>
+                      {/* Ticket Header */}
+                      <View style={styles.returnTicketHeader}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                          <View style={styles.ticketBadgeWrap}>
+                            <Text style={styles.ticketCode}>#{ticket.order_code}</Text>
+                          </View>
+                          <Text style={styles.ticketDate}>
+                            {new Date(ticket.created_at).toLocaleString('vi-VN', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: 'numeric',
+                            })}
+                          </Text>
+                        </View>
+
+                        <View
+                          style={[
+                            styles.ticketStatusBadge,
+                            isPending && styles.ticketStatusPending,
+                            isApproved && styles.ticketStatusApproved,
+                            isRejected && styles.ticketStatusRejected,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.ticketStatusText,
+                              isPending && { color: '#b45309' },
+                              isApproved && { color: '#047857' },
+                              isRejected && { color: '#b91c1c' },
+                            ]}
+                          >
+                            {isPending ? '⏳ CHỜ ADMIN DUYỆT' : isApproved ? '✓ ĐÃ CHẤP THUẬN' : '✕ ĐÃ TỪ CHỐI'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* Customer Row */}
+                      <View style={styles.returnCustomerRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.returnCustomerName}>
+                            Khách hàng: <Text style={{ fontWeight: '700', color: '#0f172a' }}>{ticket.customer_name || ticket.user_name || 'Khách vãng lai'}</Text>
+                          </Text>
+                          <Text style={styles.returnCustomerPhone}>
+                            SĐT: {ticket.customer_phone || 'Chưa cập nhật'} • Đ/c: {ticket.customer_address || 'Địa chỉ tiêu chuẩn'}
+                          </Text>
+                        </View>
+                        <View style={{ alignItems: 'flex-end' }}>
+                          <Text style={styles.returnTotalAmount}>{formatVND(Number(ticket.total_price))}</Text>
+                          <Text style={styles.returnPaymentMethod}>PTTT: {ticket.payment_method?.toUpperCase() || 'COD'}</Text>
+                        </View>
+                      </View>
+
+                      {/* Return Detail Highlight */}
+                      <View style={styles.returnDetailBanner}>
+                        <View style={styles.returnDetailRow}>
+                          <Text style={styles.returnDetailLabel}>📌 Lý do đổi trả:</Text>
+                          <Text style={styles.returnDetailValue}>{ticket.return_reason || 'Yêu cầu đổi size/mẫu'}</Text>
+                        </View>
+
+                        {ticket.return_target_size && (
+                          <View style={[styles.returnDetailRow, { marginTop: 6 }]}>
+                            <Text style={styles.returnDetailLabel}>🔄 Size muốn đổi sang:</Text>
+                            <View style={styles.targetSizeChip}>
+                              <Text style={styles.targetSizeText}>Size {ticket.return_target_size}</Text>
+                            </View>
+                          </View>
+                        )}
+
+                        {ticket.return_note && (
+                          <View style={[styles.returnDetailRow, { marginTop: 6 }]}>
+                            <Text style={styles.returnDetailLabel}>📝 Ghi chú từ khách:</Text>
+                            <Text style={[styles.returnDetailValue, { fontStyle: 'italic', color: '#475569' }]}>
+                              "{ticket.return_note}"
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+
+                      {/* Items Section */}
+                      <View style={styles.returnItemsSection}>
+                        <Text style={styles.returnItemsTitle}>Sản phẩm trong đơn hàng:</Text>
+                        {(ticket.items || []).map((item: any, idx: number) => (
+                          <View key={item.id || idx} style={styles.returnItemRow}>
+                            <Image
+                              source={getImageSource(item.image)}
+                              style={styles.returnItemThumb}
+                              contentFit="cover"
+                            />
+                            <View style={{ flex: 1, marginLeft: 10 }}>
+                              <Text style={styles.returnItemName} numberOfLines={1}>
+                                {item.product_name}
+                              </Text>
+                              <View style={{ flexDirection: 'row', gap: 6, marginTop: 3 }}>
+                                {item.size && (
+                                  <View style={styles.itemVariantPill}>
+                                    <Text style={styles.itemVariantPillText}>Size: {item.size}</Text>
+                                  </View>
+                                )}
+                                {item.color && (
+                                  <View style={styles.itemVariantPill}>
+                                    <Text style={styles.itemVariantPillText}>Màu: {item.color}</Text>
+                                  </View>
+                                )}
+                              </View>
+                            </View>
+                            <View style={{ alignItems: 'flex-end' }}>
+                              <Text style={styles.returnItemQty}>x{item.quantity}</Text>
+                              <Text style={styles.returnItemPrice}>{formatVND(Number(item.price))}</Text>
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+
+                      {/* Admin Actions */}
+                      <View style={styles.returnActionBar}>
+                        {isPending ? (
+                          <>
+                            <TouchableOpacity
+                              style={[styles.btnActionReturn, styles.btnRejectReturn]}
+                              onPress={() => handleUpdateReturnStatus(ticket.id, 'Rejected')}
+                              disabled={isUpdatingThis}
+                              activeOpacity={0.8}
+                            >
+                              <IconSymbol name="minus" size={15} color="#e11d48" />
+                              <Text style={styles.btnRejectReturnText}>Từ Chối Yêu Cầu</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                              style={[styles.btnActionReturn, styles.btnApproveReturn]}
+                              onPress={() => handleUpdateReturnStatus(ticket.id, 'Approved')}
+                              disabled={isUpdatingThis}
+                              activeOpacity={0.8}
+                            >
+                              <IconSymbol name="checkmark.seal" size={15} color="#ffffff" />
+                              <Text style={styles.btnApproveReturnText}>Chấp Thuận Đổi Trả</Text>
+                            </TouchableOpacity>
+                          </>
+                        ) : isApproved ? (
+                          <View style={styles.statusConfirmedBanner}>
+                            <IconSymbol name="checkmark.seal" size={16} color="#059669" />
+                            <Text style={styles.statusConfirmedText}>
+                              Yêu cầu đã được Admin chấp thuận. Tiến trình đổi hàng / hoàn tiền đang được thực thi.
+                            </Text>
+                            <TouchableOpacity
+                              style={styles.revertBtn}
+                              onPress={() => handleUpdateReturnStatus(ticket.id, 'Rejected')}
+                              activeOpacity={0.7}
+                            >
+                              <Text style={styles.revertBtnText}>Đổi sang từ chối</Text>
+                            </TouchableOpacity>
+                          </View>
+                        ) : (
+                          <View style={[styles.statusConfirmedBanner, { backgroundColor: '#fff1f2', borderColor: '#fecdd3' }]}>
+                            <IconSymbol name="minus" size={16} color="#e11d48" />
+                            <Text style={[styles.statusConfirmedText, { color: '#9f1239' }]}>
+                              Yêu cầu đã bị từ chối tiếp nhận bởi Admin do không đáp ứng chính sách.
+                            </Text>
+                            <TouchableOpacity
+                              style={[styles.revertBtn, { borderColor: '#fecdd3' }]}
+                              onPress={() => handleUpdateReturnStatus(ticket.id, 'Approved')}
+                              activeOpacity={0.7}
+                            >
+                              <Text style={[styles.revertBtnText, { color: '#059669' }]}>Xét duyệt lại</Text>
+                            </TouchableOpacity>
+                          </View>
+                        )}
                       </View>
                     </View>
                   );
@@ -1905,7 +2385,7 @@ export default function AdminScreen() {
               <View>
                 <Text style={styles.modalTitle}>Chi Tiết Đơn Hàng #{selectedOrder?.order_code}</Text>
 
-                {selectedOrder?.return_status === 'Requested' && (
+                {selectedOrder?.return_status === 'Requested' ? (
                   <View style={{ backgroundColor: '#fffdf5', borderWidth: 1, borderColor: '#fde68a', borderRadius: 8, padding: 10, marginTop: 8 }}>
                     <Text style={{ fontSize: 13, fontWeight: '700', color: '#b78103' }}>
                       🔄 Yêu cầu đổi trả: {selectedOrder.return_reason || 'Đổi size/mẫu'}
@@ -1915,8 +2395,34 @@ export default function AdminScreen() {
                         Ghi chú khách: "{selectedOrder.return_note}"
                       </Text>
                     ) : null}
+                    <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                      <TouchableOpacity
+                        style={{ flex: 1, backgroundColor: '#16a34a', paddingVertical: 8, borderRadius: 6, alignItems: 'center' }}
+                        onPress={() => handleUpdateReturnStatus(selectedOrder.id, 'Approved')}
+                      >
+                        <Text style={{ color: '#ffffff', fontWeight: '700', fontSize: 12 }}>✓ Chấp thuận</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={{ flex: 1, backgroundColor: '#dc2626', paddingVertical: 8, borderRadius: 6, alignItems: 'center' }}
+                        onPress={() => handleUpdateReturnStatus(selectedOrder.id, 'Rejected')}
+                      >
+                        <Text style={{ color: '#ffffff', fontWeight: '700', fontSize: 12 }}>✕ Từ chối</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                )}
+                ) : selectedOrder?.return_status === 'Approved' ? (
+                  <View style={{ backgroundColor: '#ecfdf5', borderWidth: 1, borderColor: '#a7f3d0', borderRadius: 8, padding: 8, marginTop: 8 }}>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#047857' }}>
+                      ✓ Đổi trả: Đã chấp thuận ({selectedOrder.return_reason || 'Đổi size/mẫu'})
+                    </Text>
+                  </View>
+                ) : selectedOrder?.return_status === 'Rejected' ? (
+                  <View style={{ backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca', borderRadius: 8, padding: 8, marginTop: 8 }}>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#b91c1c' }}>
+                      ✕ Đổi trả: Đã từ chối ({selectedOrder.return_reason || 'Đổi size/mẫu'})
+                    </Text>
+                  </View>
+                ) : null}
                 <Text style={styles.modalSub}>
                   Đặt lúc:{' '}
                   {selectedOrder?.created_at
@@ -2018,6 +2524,27 @@ export default function AdminScreen() {
             </ScrollView>
 
             <View style={styles.modalFooter}>
+              {selectedOrder && selectedOrder.status !== 'Completed' && selectedOrder.status !== 'Cancelled' && (
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: '#0f172a',
+                    paddingHorizontal: 14,
+                    paddingVertical: 10,
+                    borderRadius: 8,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                    marginRight: 'auto'
+                  }}
+                  onPress={() => handleFastCompleteOrder(selectedOrder.id)}
+                  activeOpacity={0.8}
+                >
+                  <IconSymbol name="bolt.fill" size={14} color="#eab308" />
+                  <Text style={{ color: '#ffffff', fontWeight: '700', fontSize: 13 }}>
+                    ⚡ Hoàn tất đơn ngay
+                  </Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={styles.modalCancelBtn}
                 onPress={() => setSelectedOrder(null)}
@@ -5140,5 +5667,254 @@ const styles = StyleSheet.create({
     color: '#b91c1c',
     fontSize: 11,
     fontWeight: '700',
+  },
+
+  // Return Tickets Module Styles
+  returnTicketCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    padding: 18,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  returnTicketHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  ticketBadgeWrap: {
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  ticketCode: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  ticketDate: {
+    fontSize: 12,
+    color: '#64748b',
+  },
+  ticketStatusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  ticketStatusPending: {
+    backgroundColor: '#fffbeb',
+    borderColor: '#fde68a',
+  },
+  ticketStatusApproved: {
+    backgroundColor: '#ecfdf5',
+    borderColor: '#a7f3d0',
+  },
+  ticketStatusRejected: {
+    backgroundColor: '#fff1f2',
+    borderColor: '#fecdd3',
+  },
+  ticketStatusText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  returnCustomerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginTop: 12,
+  },
+  returnCustomerName: {
+    fontSize: 13,
+    color: '#475569',
+  },
+  returnCustomerPhone: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 3,
+  },
+  returnTotalAmount: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  returnPaymentMethod: {
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  returnDetailBanner: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  returnDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  returnDetailLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  returnDetailValue: {
+    fontSize: 13,
+    color: '#0f172a',
+    flex: 1,
+  },
+  targetSizeChip: {
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  targetSizeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#2563eb',
+  },
+  returnItemsSection: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  returnItemsTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748b',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  returnItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  returnItemThumb: {
+    width: 38,
+    height: 38,
+    borderRadius: 6,
+    backgroundColor: '#f1f5f9',
+  },
+  returnItemName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0f172a',
+  },
+  returnItemQty: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  returnItemPrice: {
+    fontSize: 11,
+    color: '#64748b',
+  },
+  returnActionBar: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  btnActionReturn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 6,
+  },
+  btnApproveReturn: {
+    backgroundColor: '#10b981',
+  },
+  btnApproveReturnText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  btnRejectReturn: {
+    backgroundColor: '#fff1f2',
+    borderWidth: 1,
+    borderColor: '#fecdd3',
+  },
+  btnRejectReturnText: {
+    color: '#e11d48',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  statusConfirmedBanner: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ecfdf5',
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+    borderRadius: 8,
+    padding: 10,
+    gap: 8,
+  },
+  statusConfirmedText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#047857',
+  },
+  revertBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#ffffff',
+  },
+  revertBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+
+  metricSub: {
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 4,
+  },
+  filterScroll: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  itemVariantPill: {
+    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  itemVariantPillText: {
+    fontSize: 11,
+    color: '#475569',
+    fontWeight: '600',
   },
 });

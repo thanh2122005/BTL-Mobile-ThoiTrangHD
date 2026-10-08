@@ -170,12 +170,12 @@ const initialProducts = [
   },
   { 
     id: '17', 
-    name: 'Set Bộ Vest Công Sở Nữ Tone Be', 
+    name: 'Set Bộ Vest Công Sở Nam Thanh Lịch', 
     price: 1350000, 
     category: 'Bộ', 
     image: 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?q=80&w=800&auto=format&fit=crop', 
-    description: 'Set bộ vest nữ thanh lịch gồm áo blazer và quần ống đứng đồng điệu tone màu be thời thượng. Phù hợp cho môi trường công sở và gặp gỡ đối tác.', 
-    features: JSON.stringify(['Vải tuyết mưa cao cấp', 'Set áo blazer và quần', 'Tone be hiện đại', 'Tôn dáng thanh lịch']), 
+    description: 'Set bộ vest nam thanh lịch gồm áo gile/vest và quần âu ống đứng đồng điệu thời thượng. Phù hợp cho môi trường công sở và gặp gỡ đối tác.', 
+    features: JSON.stringify(['Vải may vest cao cấp', 'Set áo gile/vest và quần âu', 'Form slimfit đứng dáng', 'Tôn dáng thanh lịch']), 
     discount: 10 
   },
   { 

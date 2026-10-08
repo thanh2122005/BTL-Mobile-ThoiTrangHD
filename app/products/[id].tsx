@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -86,12 +86,28 @@ export default function ProductDetailScreen() {
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const [selectedStarFilter, setSelectedStarFilter] = useState<number | 'all'>('all');
 
-  // Review Modal state
+  // Review state & Eligibility check
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [newRating, setNewRating] = useState(5);
   const [newComment, setNewComment] = useState('');
   const [newUserName, setNewUserName] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
+  const [isEditingReview, setIsEditingReview] = useState(false);
+  const [reviewEligibility, setReviewEligibility] = useState<{
+    loading: boolean;
+    canReview: boolean;
+    canEdit: boolean;
+    hasReviewed: boolean;
+    reason?: string;
+    message?: string;
+    existingReview?: any;
+    eligibleOrder?: any;
+  }>({
+    loading: true,
+    canReview: false,
+    canEdit: false,
+    hasReviewed: false,
+  });
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -119,9 +135,61 @@ export default function ProductDetailScreen() {
       });
   };
 
+  const checkReviewEligibility = useCallback(async () => {
+    if (!id) return;
+    try {
+      const url = `${API_URL}/api/products/${id}/review-eligibility?userId=${user?.id || ''}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data && data.success) {
+        setReviewEligibility({
+          loading: false,
+          canReview: !!data.canReview,
+          canEdit: !!data.canEdit,
+          hasReviewed: !!data.hasReviewed,
+          reason: data.reason,
+          message: data.message,
+          existingReview: data.existingReview,
+          eligibleOrder: data.eligibleOrder,
+        });
+      }
+    } catch (err) {
+      console.error('Lỗi kiểm tra quyền đánh giá:', err);
+    }
+  }, [id, user?.id]);
+
   useEffect(() => {
     fetchReviews();
-  }, [id]);
+    checkReviewEligibility();
+  }, [id, user?.id, checkReviewEligibility]);
+
+  const handlePressReviewButton = () => {
+    if (!user) {
+      showToast('Vui lòng đăng nhập tài khoản để gửi đánh giá sản phẩm.');
+      return;
+    }
+
+    if (reviewEligibility.hasReviewed && reviewEligibility.existingReview) {
+      // Đã đánh giá rồi -> Mở modal chế độ chỉnh sửa (Sửa đánh giá)
+      setIsEditingReview(true);
+      setNewRating(Number(reviewEligibility.existingReview.rating) || 5);
+      setNewComment(reviewEligibility.existingReview.comment || '');
+      setShowReviewModal(true);
+      return;
+    }
+
+    if (reviewEligibility.canReview) {
+      // Đủ điều kiện viết đánh giá mới
+      setIsEditingReview(false);
+      setNewRating(5);
+      setNewComment('');
+      setShowReviewModal(true);
+      return;
+    }
+
+    // Nghiệp vụ từ chối: Chưa mua hoặc đơn hàng chưa hoàn thành
+    showToast(reviewEligibility.message || 'Bạn chưa mua sản phẩm này hoặc đơn hàng chưa giao xong. Chỉ khách hàng đã mua và nhận hàng thành công mới có thể đánh giá.');
+  };
 
   const handleSubmitReview = async () => {
     if (!newComment.trim()) {
@@ -131,6 +199,35 @@ export default function ProductDetailScreen() {
 
     setSubmittingReview(true);
     try {
+      if (!user) {
+        showToast('Vui lòng đăng nhập để gửi đánh giá');
+        setSubmittingReview(false);
+        return;
+      }
+      if (isEditingReview) {
+        // Cập nhật đánh giá hiện có (PUT)
+        const res = await fetch(`${API_URL}/api/products/${id}/reviews`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user.id,
+            rating: newRating,
+            comment: newComment.trim(),
+          }),
+        });
+
+        const data = await res.json();
+        if (data && data.success) {
+          showToast('Cập nhật đánh giá thành công!');
+          setShowReviewModal(false);
+          fetchReviews();
+          checkReviewEligibility();
+        } else {
+          showToast(data?.message || 'Không thể cập nhật đánh giá');
+        }
+        return;
+      }
+
       const reviewerName = user?.name || newUserName.trim() || 'Khách hàng';
       const reviewerAvatar = user?.avatar || undefined;
 
@@ -156,6 +253,7 @@ export default function ProductDetailScreen() {
         setShowReviewModal(false);
         setNewComment('');
         fetchReviews();
+        checkReviewEligibility();
       } else {
         showToast(data?.message || 'Không thể gửi đánh giá');
       }
@@ -537,18 +635,25 @@ export default function ProductDetailScreen() {
               <Text style={styles.reviewsTitle}>ĐÁNH GIÁ TỪ NGƯỜI MUA</Text>
               <Text style={styles.reviewsSubtitle}>Nhận xét thực tế từ khách hàng đã mua sản phẩm này</Text>
             </View>
-            <TouchableOpacity
-              style={styles.writeReviewBtn}
-              onPress={() => {
-                if (user?.name) {
-                  setNewUserName(user.name);
-                }
-                setShowReviewModal(true);
-              }}
-            >
-              <IconSymbol name="star.fill" size={14} color="#ffffff" />
-              <Text style={styles.writeReviewBtnText}>Viết đánh giá</Text>
-            </TouchableOpacity>
+            {reviewEligibility.hasReviewed ? (
+              <TouchableOpacity
+                style={[styles.writeReviewBtn, { backgroundColor: '#b78103' }]}
+                onPress={handlePressReviewButton}
+                activeOpacity={0.85}
+              >
+                <IconSymbol name="pencil" size={14} color="#ffffff" />
+                <Text style={styles.writeReviewBtnText}>Sửa đánh giá</Text>
+              </TouchableOpacity>
+            ) : reviewEligibility.canReview ? (
+              <TouchableOpacity
+                style={styles.writeReviewBtn}
+                onPress={handlePressReviewButton}
+                activeOpacity={0.85}
+              >
+                <IconSymbol name="star.fill" size={14} color="#ffffff" />
+                <Text style={styles.writeReviewBtnText}>Viết đánh giá</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
 
           {/* Rating Summary Card */}
@@ -843,7 +948,9 @@ export default function ProductDetailScreen() {
           <View style={styles.reviewModalCard}>
             {/* Modal Header */}
             <View style={styles.reviewModalHeader}>
-              <Text style={styles.reviewModalTitle}>Đánh giá sản phẩm</Text>
+              <Text style={styles.reviewModalTitle}>
+                {isEditingReview ? 'Chỉnh sửa đánh giá của bạn' : 'Đánh giá sản phẩm đã mua'}
+              </Text>
               <TouchableOpacity
                 onPress={() => setShowReviewModal(false)}
                 style={styles.reviewModalClose}
@@ -854,6 +961,31 @@ export default function ProductDetailScreen() {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 440 }}>
+              {/* Verification & Edit Mode Banner */}
+              <View style={{
+                backgroundColor: isEditingReview ? '#fffbeb' : '#ecfdf5',
+                borderWidth: 1,
+                borderColor: isEditingReview ? '#fde68a' : '#a7f3d0',
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                borderRadius: 8,
+                marginBottom: 12,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 8
+              }}>
+                <IconSymbol 
+                  name={isEditingReview ? 'pencil' : 'checkmark.seal.fill'} 
+                  size={14} 
+                  color={isEditingReview ? '#b45309' : '#047857'} 
+                />
+                <Text style={{ fontSize: 12, color: isEditingReview ? '#92400e' : '#065f46', fontWeight: '600', flex: 1 }}>
+                  {isEditingReview 
+                    ? 'Bạn đang chỉnh sửa đánh giá trước đây (Mỗi khách hàng chỉ gửi 1 đánh giá).' 
+                    : 'Xác thực người mua: Đơn hàng đã giao thành công.'}
+                </Text>
+              </View>
+
               {/* Product Brief */}
               <View style={styles.reviewProductRow}>
                 <Image source={imageSource} style={styles.reviewProductThumb} contentFit="cover" />
@@ -891,19 +1023,18 @@ export default function ProductDetailScreen() {
                 </Text>
               </View>
 
-              {/* Reviewer Name if Guest */}
-              {!user && (
-                <View style={{ marginBottom: 14 }}>
-                  <Text style={styles.inputLabel}>Tên của bạn (hiển thị trên nhận xét):</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="VD: Hoàng Nam"
-                    placeholderTextColor="#9ca3af"
-                    value={newUserName}
-                    onChangeText={setNewUserName}
-                  />
+              {/* Reviewer Identity */}
+              <View style={{ marginBottom: 14 }}>
+                <Text style={styles.inputLabel}>Tài khoản người mua:</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#1a1c1c' }}>
+                    {user?.name || 'Khách hàng'}
+                  </Text>
+                  <View style={{ backgroundColor: '#ecfdf5', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                    <Text style={{ fontSize: 11, color: '#047857', fontWeight: '600' }}>✓ Đã mua hàng</Text>
+                  </View>
                 </View>
-              )}
+              </View>
 
               {/* Comment Input */}
               <View style={{ marginBottom: 16 }}>
@@ -929,14 +1060,16 @@ export default function ProductDetailScreen() {
                 <Text style={styles.cancelReviewText}>Hủy</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.submitReviewBtn, submittingReview && { opacity: 0.7 }]}
+                style={[styles.submitReviewBtn, submittingReview && { opacity: 0.7 }, isEditingReview && { backgroundColor: '#b78103' }]}
                 onPress={handleSubmitReview}
                 disabled={submittingReview}
               >
                 {submittingReview ? (
                   <ActivityIndicator size="small" color="#ffffff" />
                 ) : (
-                  <Text style={styles.submitReviewText}>Gửi đánh giá</Text>
+                  <Text style={styles.submitReviewText}>
+                    {isEditingReview ? 'Cập nhật đánh giá' : 'Gửi đánh giá'}
+                  </Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -1978,5 +2111,26 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 12,
     fontWeight: '700',
+  },
+  writeReviewBtnDisabled: {
+    backgroundColor: '#94a3b8',
+  },
+  verifiedOrderBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#ecfdf5',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+  },
+  verifiedOrderText: {
+    fontSize: 12,
+    color: '#065f46',
+    fontWeight: '700',
+    flex: 1,
   },
 });

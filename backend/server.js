@@ -565,8 +565,11 @@ app.post('/api/orders', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Giỏ hàng đang trống, không thể tạo đơn hàng' });
   }
 
-  if (!customerPhone || customerPhone.length < 9) {
-    return res.status(400).json({ success: false, message: 'Số điện thoại nhận hàng không hợp lệ' });
+  if (!customerPhone || !/^(0[0-9]{9,10})$/.test(customerPhone)) {
+    return res.status(400).json({ 
+      success: false, 
+      message: 'Số điện thoại nhận hàng không hợp lệ (Phải là số điện thoại Việt Nam gồm 10 chữ số bắt đầu bằng số 0)' 
+    });
   }
 
   if (!customerAddress || customerAddress.length < 5) {
@@ -604,6 +607,32 @@ app.post('/api/orders', async (req, res) => {
           success: false, 
           message: `Sản phẩm "${prod.name}" trong kho chỉ còn ${availableStock} chiếc, không đủ số lượng bạn đặt (${qty} chiếc).` 
         });
+      }
+
+      // KIỂM TRA TỒN KHO BIẾN THỂ SIZE X MÀU SẮC (Chống đặt mua phân loại đã hết hàng)
+      if (item.size && item.color) {
+        try {
+          const [vCheckRows] = await connection.query('SELECT variants FROM products WHERE id = ? FOR UPDATE', [prodId]);
+          if (vCheckRows.length > 0 && vCheckRows[0].variants) {
+            const vList = typeof vCheckRows[0].variants === 'string' ? JSON.parse(vCheckRows[0].variants) : vCheckRows[0].variants;
+            const matchedV = vList.find(v => 
+              String(v.size) === String(item.size) && 
+              (v.color === item.color || v.color_code === item.color)
+            );
+            if (matchedV) {
+              const vStock = Number(matchedV.stock) || 0;
+              if (vStock < qty) {
+                await connection.rollback();
+                return res.status(400).json({
+                  success: false,
+                  message: `Sản phẩm "${prod.name}" (Size ${item.size}, Màu ${item.color}) trong kho chỉ còn ${vStock} chiếc, không đủ số lượng bạn đặt (${qty} chiếc).`
+                });
+              }
+            }
+          }
+        } catch (err) {
+          console.error('Lỗi kiểm tra variant stock:', err);
+        }
       }
 
       const itemPrice = Number(prod.price);
@@ -809,6 +838,91 @@ app.get('/api/orders/:identifier', async (req, res) => {
   }
 });
 
+
+// Helper: Hoàn trả tồn kho (cả tổng kho sản phẩm và chi tiết Size x Màu sắc)
+async function restoreOrderStock(connection, orderId) {
+  const [items] = await connection.query(
+    'SELECT product_id, quantity, size, color FROM order_items WHERE order_id = ?',
+    [orderId]
+  );
+
+  for (const item of items) {
+    const qty = Number(item.quantity) || 1;
+    // 1. Hoàn trả tồn kho tổng và giảm lượt bán
+    await connection.query(
+      'UPDATE products SET stock = stock + ?, sold_count = GREATEST(0, sold_count - ?) WHERE id = ?',
+      [qty, qty, item.product_id]
+    );
+
+    // 2. Hoàn trả tồn kho chi tiết theo Size & Màu sắc
+    if (item.size && item.color) {
+      try {
+        const [pRows] = await connection.query('SELECT variants FROM products WHERE id = ? FOR UPDATE', [item.product_id]);
+        if (pRows.length > 0 && pRows[0].variants) {
+          let vList = typeof pRows[0].variants === 'string' ? JSON.parse(pRows[0].variants) : pRows[0].variants;
+          let updated = false;
+          vList = vList.map(v => {
+            const matchSize = String(v.size) === String(item.size);
+            const matchColor = v.color === item.color || v.color_code === item.color;
+            if (matchSize && matchColor) {
+              updated = true;
+              return { ...v, stock: (Number(v.stock) || 0) + qty };
+            }
+            return v;
+          });
+          if (updated) {
+            await connection.query('UPDATE products SET variants = ? WHERE id = ?', [JSON.stringify(vList), item.product_id]);
+          }
+        }
+      } catch (err) {
+        console.error('Lỗi hoàn trả variant stock cho sản phẩm #' + item.product_id, err);
+      }
+    }
+  }
+}
+
+// Helper: Trừ tồn kho (cả tổng kho sản phẩm và chi tiết Size x Màu sắc)
+async function deductOrderStock(connection, orderId) {
+  const [items] = await connection.query(
+    'SELECT product_id, quantity, size, color FROM order_items WHERE order_id = ?',
+    [orderId]
+  );
+
+  for (const item of items) {
+    const qty = Number(item.quantity) || 1;
+    // 1. Trừ tồn kho tổng và tăng lượt bán
+    await connection.query(
+      'UPDATE products SET stock = GREATEST(0, stock - ?), sold_count = sold_count + ? WHERE id = ?',
+      [qty, qty, item.product_id]
+    );
+
+    // 2. Trừ tồn kho chi tiết theo Size & Màu sắc
+    if (item.size && item.color) {
+      try {
+        const [pRows] = await connection.query('SELECT variants FROM products WHERE id = ? FOR UPDATE', [item.product_id]);
+        if (pRows.length > 0 && pRows[0].variants) {
+          let vList = typeof pRows[0].variants === 'string' ? JSON.parse(pRows[0].variants) : pRows[0].variants;
+          let updated = false;
+          vList = vList.map(v => {
+            const matchSize = String(v.size) === String(item.size);
+            const matchColor = v.color === item.color || v.color_code === item.color;
+            if (matchSize && matchColor) {
+              updated = true;
+              return { ...v, stock: Math.max(0, (Number(v.stock) || 0) - qty) };
+            }
+            return v;
+          });
+          if (updated) {
+            await connection.query('UPDATE products SET variants = ? WHERE id = ?', [JSON.stringify(vList), item.product_id]);
+          }
+        }
+      } catch (err) {
+        console.error('Lỗi trừ variant stock cho sản phẩm #' + item.product_id, err);
+      }
+    }
+  }
+}
+
 // API 6.1: Hủy đơn hàng (nếu đang ở trạng thái Pending) và hoàn trả tồn kho
 app.put('/api/orders/:identifier/cancel', async (req, res) => {
   const connection = await pool.getConnection();
@@ -817,9 +931,9 @@ app.put('/api/orders/:identifier/cancel', async (req, res) => {
     const identifier = req.params.identifier;
 
     // 1. Kiểm tra đơn hàng có tồn tại và đang Pending không
-    let query = 'SELECT id, status, voucher_code FROM orders WHERE id = ? FOR UPDATE';
+    let query = 'SELECT id, user_id, status, voucher_code FROM orders WHERE id = ? FOR UPDATE';
     if (isNaN(Number(identifier))) {
-      query = 'SELECT id, status, voucher_code FROM orders WHERE order_code = ? FOR UPDATE';
+      query = 'SELECT id, user_id, status, voucher_code FROM orders WHERE order_code = ? FOR UPDATE';
     }
     const [orders] = await connection.query(query, [identifier]);
 
@@ -837,20 +951,21 @@ app.put('/api/orders/:identifier/cancel', async (req, res) => {
       });
     }
 
-    // 2. Lấy danh sách sản phẩm trong đơn để hoàn trả kho
-    const [items] = await connection.query(
-      'SELECT product_id, quantity FROM order_items WHERE order_id = ?',
-      [order.id]
-    );
-
-    for (const item of items) {
-      await connection.query(
-        'UPDATE products SET stock = stock + ?, sold_count = GREATEST(0, sold_count - ?) WHERE id = ?',
-        [item.quantity, item.quantity, item.product_id]
-      );
+    // Kiểm tra quyền sở hữu đơn hàng
+    const reqUserId = req.body?.userId || req.body?.user_id;
+    if (reqUserId && order.user_id && Number(order.user_id) !== Number(reqUserId)) {
+      await connection.rollback();
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Bạn không có quyền hủy đơn hàng của người khác' 
+      });
     }
 
-    const cancelReason = (req.body.cancelReason || req.body.cancel_reason || 'Khách hàng yêu cầu hủy đơn').trim();
+    // 2. Hoàn trả tồn kho toàn diện (Cả tổng kho và chi tiết Size x Màu sắc)
+    await restoreOrderStock(connection, order.id);
+
+    // Xử lý an toàn nếu req.body không được gửi lên hoặc undefined
+    const cancelReason = ((req.body && (req.body.cancelReason || req.body.cancel_reason)) || 'Khách hàng yêu cầu hủy đơn').trim();
 
     // 3. Cập nhật trạng thái thành Cancelled
     await connection.query("UPDATE orders SET status = 'Cancelled', cancel_reason = ? WHERE id = ?", [cancelReason, order.id]);
@@ -1102,11 +1217,122 @@ app.get('/api/products/:id/reviews', async (req, res) => {
   }
 });
 
-// API 15: Gửi đánh giá sản phẩm mới
+
+// API 14.1: Kiểm tra điều kiện đánh giá sản phẩm (BẮT BUỘC: ĐÃ MUA, ĐƠN COMPLETED, CHỈ ĐÁNH GIÁ 1 LẦN HOẶC SỬA ĐÁNH GIÁ)
+app.get('/api/products/:id/review-eligibility', async (req, res) => {
+  try {
+    const productId = String(req.params.id);
+    const userId = req.query.userId;
+
+    if (!userId || userId === 'null' || userId === 'undefined') {
+      return res.json({
+        success: true,
+        isLoggedIn: false,
+        hasPurchased: false,
+        hasReviewed: false,
+        canReview: false,
+        canEdit: false,
+        reason: 'NOT_LOGGED_IN',
+        message: 'Vui lòng đăng nhập tài khoản để gửi đánh giá sản phẩm.'
+      });
+    }
+
+    // 1. Kiểm tra xem người dùng đã từng đánh giá sản phẩm này chưa (bất kể qua đơn hàng nào)
+    const [existingReviews] = await pool.query(
+      'SELECT id, rating, comment, size, color, created_at, order_id FROM reviews WHERE user_id = ? AND product_id = ? ORDER BY id DESC LIMIT 1',
+      [userId, productId]
+    );
+
+    if (existingReviews.length > 0) {
+      // Đã từng đánh giá rồi: NGHIỆP VỤ CHẶN ĐÁNH GIÁ LẦN 2, CHỈ CHO PHÉP SỬA ĐÁNH GIÁ!
+      return res.json({
+        success: true,
+        isLoggedIn: true,
+        hasPurchased: true,
+        hasReviewed: true,
+        canReview: false,
+        canEdit: true,
+        reason: 'ALREADY_REVIEWED',
+        existingReview: existingReviews[0],
+        message: 'Bạn đã đánh giá sản phẩm này rồi. Bạn chỉ có thể chỉnh sửa đánh giá đã gửi.'
+      });
+    }
+
+    // 2. Nếu chưa từng đánh giá -> Kiểm tra xem có đơn hàng Completed chứa sản phẩm này không
+    const [completedOrders] = await pool.query(
+      'SELECT o.id as order_id, o.order_code, oi.size, oi.color, o.created_at ' +
+      'FROM orders o ' +
+      'JOIN order_items oi ON o.id = oi.order_id ' +
+      'WHERE o.user_id = ? AND oi.product_id = ? AND o.status = "Completed" ' +
+      'ORDER BY o.id DESC',
+      [userId, productId]
+    );
+
+    if (completedOrders.length === 0) {
+      // Kiểm tra xem khách có đơn hàng nào đang chờ xử lý / vận chuyển không
+      const [pendingOrders] = await pool.query(
+        'SELECT o.id, o.order_code, o.status ' +
+        'FROM orders o ' +
+        'JOIN order_items oi ON o.id = oi.order_id ' +
+        'WHERE o.user_id = ? AND oi.product_id = ? AND o.status IN ("Pending", "Processing")',
+        [userId, productId]
+      );
+
+      if (pendingOrders.length > 0) {
+        return res.json({
+          success: true,
+          isLoggedIn: true,
+          hasPurchased: false,
+          hasReviewed: false,
+          canReview: false,
+          canEdit: false,
+          reason: 'ORDER_NOT_COMPLETED',
+          message: 'Đơn hàng của bạn đang được xử lý hoặc vận chuyển. Bạn chỉ có thể đánh giá sau khi đã nhận hàng thành công.'
+        });
+      }
+
+      return res.json({
+        success: true,
+        isLoggedIn: true,
+        hasPurchased: false,
+        hasReviewed: false,
+        canReview: false,
+        canEdit: false,
+        reason: 'NOT_PURCHASED',
+        message: 'Bạn chưa mua sản phẩm này. Chỉ khách hàng đã mua và nhận hàng thành công mới có thể gửi đánh giá.'
+      });
+    }
+
+    // 3. Đã mua, đơn hàng Completed và CHƯA TỪNG ĐÁNH GIÁ -> Đủ điều kiện đánh giá 1 lần duy nhất!
+    return res.json({
+      success: true,
+      isLoggedIn: true,
+      hasPurchased: true,
+      hasReviewed: false,
+      canReview: true,
+      canEdit: false,
+      reason: 'ELIGIBLE',
+      eligibleOrder: completedOrders[0],
+      message: 'Bạn đủ điều kiện gửi đánh giá cho sản phẩm này.'
+    });
+  } catch (error) {
+    console.error('Lỗi kiểm tra quyền đánh giá:', error);
+    res.status(500).json({ success: false, message: 'Lỗi server khi kiểm tra quyền đánh giá' });
+  }
+});
+
+// API 15: Gửi đánh giá sản phẩm mới (CHỈ ĐƯỢC 1 LẦN DUY NHẤT CHO MỖI USER TRÊN 1 SẢN PHẨM)
 app.post('/api/products/:id/reviews', async (req, res) => {
   try {
-    const productId = req.params.id;
+    const productId = String(req.params.id);
     const { userId, userName, userAvatar, rating, comment, orderId, size, color } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Vui lòng đăng nhập tài khoản để gửi đánh giá sản phẩm.' 
+      });
+    }
 
     if (!rating || Number(rating) < 1 || Number(rating) > 5) {
       return res.status(400).json({ success: false, message: 'Số sao đánh giá phải từ 1 đến 5' });
@@ -1116,50 +1342,52 @@ app.post('/api/products/:id/reviews', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Vui lòng nhập nội dung đánh giá' });
     }
 
-    // 1. Chặn đánh giá trùng lặp cho cùng một đơn hàng và sản phẩm
-    if (orderId) {
-      const [existing] = await pool.query(
-        'SELECT id FROM reviews WHERE order_id = ? AND product_id = ?',
-        [orderId, productId]
-      );
-      if (existing.length > 0) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'Bạn đã gửi đánh giá cho sản phẩm này trong đơn hàng này rồi' 
-        });
-      }
+    // 1. Chặn tuyệt đối đánh giá 2 lần: Mỗi user chỉ được đánh giá 1 lần cho mỗi sản phẩm!
+    const [existing] = await pool.query(
+      'SELECT id FROM reviews WHERE user_id = ? AND product_id = ?',
+      [userId, productId]
+    );
+    if (existing.length > 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Bạn đã gửi đánh giá cho sản phẩm này rồi. Bạn chỉ có thể sửa đánh giá hiện có chứ không được gửi đánh giá lần 2.' 
+      });
     }
 
-    // 2. Xác thực đã mua hàng (is_verified_purchase)
-    let isVerifiedPurchase = 0;
+    // 2. Nghiệp vụ bắt buộc: User phải có đơn hàng Completed chứa sản phẩm này!
+    let queryEligible = 
+      'SELECT o.id as order_id, o.order_code, oi.size, oi.color ' +
+      'FROM orders o ' +
+      'JOIN order_items oi ON o.id = oi.order_id ' +
+      'WHERE o.user_id = ? AND oi.product_id = ? AND o.status = "Completed"';
+    const params = [userId, productId];
     if (orderId) {
-      const [ordRows] = await pool.query(
-        "SELECT id FROM orders WHERE id = ? AND status = 'Completed'",
-        [orderId]
-      );
-      if (ordRows.length > 0) {
-        isVerifiedPurchase = 1;
-      }
-    } else if (userId) {
-      const [boughtRows] = await pool.query(
-        `SELECT o.id FROM orders o 
-         JOIN order_items oi ON o.id = oi.order_id 
-         WHERE o.user_id = ? AND oi.product_id = ? AND o.status = 'Completed'`,
-        [userId, productId]
-      );
-      if (boughtRows.length > 0) {
-        isVerifiedPurchase = 1;
-      }
+      queryEligible += ' AND o.id = ?';
+      params.push(orderId);
+    }
+    queryEligible += ' ORDER BY o.id DESC';
+
+    const [eligibleOrders] = await pool.query(queryEligible, params);
+
+    if (eligibleOrders.length === 0) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Nghiệp vụ từ chối: Bạn chưa mua sản phẩm này hoặc đơn hàng chưa hoàn thành. Chỉ người mua đã nhận hàng thành công mới có thể gửi đánh giá.' 
+      });
     }
 
+    const targetOrder = eligibleOrders[0];
+    const targetOrderId = targetOrder.order_id;
     const name = (userName && userName.trim()) || 'Khách hàng';
     const avatar = userAvatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200&auto=format&fit=crop';
     const starRating = Math.round(Number(rating));
+    const finalSize = size || targetOrder.size || null;
+    const finalColor = color || targetOrder.color || null;
 
     const [result] = await pool.query(
-      `INSERT INTO reviews (product_id, user_id, user_name, user_avatar, rating, comment, order_id, size, color, is_verified_purchase)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [productId, userId || null, name, avatar, starRating, comment.trim(), orderId || null, size || null, color || null, isVerifiedPurchase]
+      'INSERT INTO reviews (product_id, user_id, user_name, user_avatar, rating, comment, order_id, size, color, is_verified_purchase) ' +
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)',
+      [productId, userId, name, avatar, starRating, comment.trim(), targetOrderId, finalSize, finalColor]
     );
 
     const [newReviewRows] = await pool.query('SELECT * FROM reviews WHERE id = ?', [result.insertId]);
@@ -1175,18 +1403,79 @@ app.post('/api/products/:id/reviews', async (req, res) => {
   }
 });
 
-// API 16: Lấy danh sách product_id đã đánh giá của 1 đơn hàng
+// API 15.1: Chỉnh sửa đánh giá hiện có (PUT /api/products/:id/reviews)
+app.put('/api/products/:id/reviews', async (req, res) => {
+  try {
+    const productId = String(req.params.id);
+    const { userId, rating, comment } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Vui lòng đăng nhập để chỉnh sửa đánh giá.' 
+      });
+    }
+
+    if (!rating || Number(rating) < 1 || Number(rating) > 5) {
+      return res.status(400).json({ success: false, message: 'Số sao đánh giá phải từ 1 đến 5' });
+    }
+
+    if (!comment || !comment.trim()) {
+      return res.status(400).json({ success: false, message: 'Vui lòng nhập nội dung đánh giá' });
+    }
+
+    // Tìm đánh giá cũ của user cho sản phẩm này
+    const [existingRows] = await pool.query(
+      'SELECT id FROM reviews WHERE user_id = ? AND product_id = ? ORDER BY id DESC LIMIT 1',
+      [userId, productId]
+    );
+
+    if (existingRows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy đánh giá trước đó của bạn đối với sản phẩm này để chỉnh sửa.'
+      });
+    }
+
+    const reviewId = existingRows[0].id;
+    const starRating = Math.round(Number(rating));
+
+    await pool.query(
+      'UPDATE reviews SET rating = ?, comment = ? WHERE id = ?',
+      [starRating, comment.trim(), reviewId]
+    );
+
+    const [updatedRows] = await pool.query('SELECT * FROM reviews WHERE id = ?', [reviewId]);
+
+    res.json({
+      success: true,
+      message: 'Cập nhật đánh giá thành công!',
+      data: updatedRows[0]
+    });
+  } catch (error) {
+    console.error('Lỗi cập nhật đánh giá:', error);
+    res.status(500).json({ success: false, message: 'Lỗi server khi cập nhật đánh giá' });
+  }
+});
+
+// API 16: Lấy danh sách product_id đã đánh giá của 1 đơn hàng kèm chi tiết đánh giá
 app.get('/api/orders/:id/reviewed-items', async (req, res) => {
   try {
     const orderId = req.params.id;
     const [rows] = await pool.query(
-      'SELECT product_id FROM reviews WHERE order_id = ?',
+      'SELECT id, product_id, rating, comment, size, color, created_at FROM reviews WHERE order_id = ?',
       [orderId]
     );
     const reviewedProductIds = rows.map(r => String(r.product_id));
+    const reviewsMap = {};
+    rows.forEach(r => {
+      reviewsMap[String(r.product_id)] = r;
+    });
+
     res.json({
       success: true,
-      data: reviewedProductIds
+      data: reviewedProductIds,
+      reviews: reviewsMap
     });
   } catch (error) {
     console.error('Lỗi lấy thông tin đã đánh giá của đơn:', error);
@@ -1375,34 +1664,16 @@ app.put('/api/admin/orders/:id/status', async (req, res) => {
     const oldStatus = currOrder[0].status;
     const voucherCode = currOrder[0].voucher_code;
 
-    // Nếu chuyển sang Cancelled và trước đó chưa phải Cancelled -> Hoàn trả tồn kho
+    // Nếu chuyển sang Cancelled và trước đó chưa phải Cancelled -> Hoàn trả tồn kho (cả tổng và chi tiết size/màu)
     if (status === 'Cancelled' && oldStatus !== 'Cancelled') {
-      const [items] = await connection.query(
-        'SELECT product_id, quantity FROM order_items WHERE order_id = ?',
-        [orderId]
-      );
-      for (const item of items) {
-        await connection.query(
-          'UPDATE products SET stock = stock + ?, sold_count = GREATEST(0, sold_count - ?) WHERE id = ?',
-          [item.quantity, item.quantity, item.product_id]
-        );
-      }
+      await restoreOrderStock(connection, orderId);
       if (voucherCode) {
         await connection.query('UPDATE vouchers SET times_used = GREATEST(0, times_used - 1) WHERE code = ?', [voucherCode]);
       }
     } 
-    // Nếu chuyển từ Cancelled sang trạng thái khác -> Trừ lại tồn kho
+    // Nếu chuyển từ Cancelled sang trạng thái khác -> Trừ lại tồn kho (cả tổng và chi tiết size/màu)
     else if (oldStatus === 'Cancelled' && status !== 'Cancelled') {
-      const [items] = await connection.query(
-        'SELECT product_id, quantity FROM order_items WHERE order_id = ?',
-        [orderId]
-      );
-      for (const item of items) {
-        await connection.query(
-          'UPDATE products SET stock = GREATEST(0, stock - ?), sold_count = sold_count + ? WHERE id = ?',
-          [item.quantity, item.quantity, item.product_id]
-        );
-      }
+      await deductOrderStock(connection, orderId);
       if (voucherCode) {
         await connection.query('UPDATE vouchers SET times_used = times_used + 1 WHERE code = ?', [voucherCode]);
       }
@@ -1481,10 +1752,13 @@ app.post('/api/admin/products', async (req, res) => {
     const finalOriginalPrice = original_price ? Number(original_price) : Number(price);
     const finalDiscount = discount ? Number(discount) : 0;
 
+    const initialStock = req.body.stock !== undefined ? Math.max(0, Number(req.body.stock)) : 50;
+    const initialVariants = generateDefaultVariants(category || 'Khác', initialStock, id);
+
     await pool.query(
-      `INSERT INTO products (id, name, price, original_price, discount, category, image, description)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, name, Number(price), finalOriginalPrice, finalDiscount, category || 'Khác', image || '', description || '']
+      `INSERT INTO products (id, name, price, original_price, discount, category, image, description, stock, variants)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, name, Number(price), finalOriginalPrice, finalDiscount, category || 'Khác', image || '', description || '', initialStock, JSON.stringify(initialVariants)]
     );
 
     res.json({
@@ -1604,19 +1878,157 @@ app.delete('/api/admin/vouchers/:code', async (req, res) => {
 
 // Khởi động server
 
-// API tiếp nhận yêu cầu Đổi trả / Bảo hành
+// API tiếp nhận yêu cầu Đổi trả / Bảo hành (KIỂM SOÁT NGHIỆP VỤ 7 NGÀY & ĐÃ GIAO THÀNH CÔNG)
 app.post('/api/orders/:id/return', async (req, res) => {
   try {
     const orderId = req.params.id;
-    const { reason, targetSize, note } = req.body;
+    const { reason, targetSize, note, userId } = req.body;
+
+    const [orders] = await pool.query('SELECT * FROM orders WHERE id = ?', [orderId]);
+    if (orders.length === 0) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng' });
+    }
+
+    const order = orders[0];
+
+    // 1. Chỉ đơn hàng Completed mới được yêu cầu đổi trả
+    if (order.status !== 'Completed') {
+      return res.status(400).json({
+        success: false,
+        message: 'Chỉ có thể yêu cầu đổi trả đối với đơn hàng đã được giao thành công (Hoàn thành).'
+      });
+    }
+
+    // 2. Kiểm tra thời hạn 7 ngày
+    const orderDate = new Date(order.created_at);
+    const diffDays = Math.floor((Date.now() - orderDate.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays > 7) {
+      return res.status(400).json({
+        success: false,
+        message: `Đơn hàng đã đặt cách đây ${diffDays} ngày, vượt quá thời hạn chính sách đổi trả 7 ngày của ThoiTrangHD.`
+      });
+    }
+
+    // 3. Kiểm tra xem đã có yêu cầu đổi trả đang xử lý chưa
+    if (order.return_status === 'Requested') {
+      return res.status(400).json({
+        success: false,
+        message: 'Đơn hàng này đang có yêu cầu đổi trả chờ quản trị viên xử lý.'
+      });
+    } else if (order.return_status === 'Approved') {
+      return res.status(400).json({
+        success: false,
+        message: 'Yêu cầu đổi trả của đơn hàng này đã được chấp thuận trước đó.'
+      });
+    }
+
+    // 4. Kiểm tra quyền sở hữu (nếu có userId)
+    if (userId && order.user_id && Number(order.user_id) !== Number(userId)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Bạn không có quyền yêu cầu đổi trả cho đơn hàng của người khác.'
+      });
+    }
+
     await pool.query(
       "UPDATE orders SET return_reason = ?, return_target_size = ?, return_note = ?, return_status = 'Requested' WHERE id = ?",
       [reason || 'Yêu cầu đổi trả', targetSize || null, note || null, orderId]
     );
-    res.json({ success: true, message: 'Đã tiếp nhận yêu cầu đổi trả thành công' });
+
+    res.json({ 
+      success: true, 
+      message: 'Đã tiếp nhận yêu cầu đổi trả bảo hành thành công! Bộ phận CSKH sẽ liên hệ trong 24h.' 
+    });
   } catch (err) {
     console.error('Lỗi tiếp nhận đổi trả:', err);
     res.status(500).json({ success: false, message: 'Lỗi máy chủ khi ghi nhận đổi trả' });
+  }
+});
+
+// API Admin cập nhật trạng thái Đổi trả
+// API Admin Returns
+app.get('/api/admin/returns', async (req, res) => {
+  try {
+    const { status, search } = req.query;
+    let query = `
+      SELECT o.*, u.email as user_email, u.name as user_name
+      FROM orders o
+      LEFT JOIN users u ON o.user_id = u.id
+      WHERE o.return_status IS NOT NULL
+    `;
+    const params = [];
+
+    if (status && status !== 'ALL' && status !== 'All') {
+      query += ' AND o.return_status = ?';
+      params.push(status);
+    }
+
+    if (search) {
+      query += ' AND (o.order_code LIKE ? OR o.customer_name LIKE ? OR o.customer_phone LIKE ? OR o.return_reason LIKE ?)';
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+    }
+
+    query += ' ORDER BY o.id DESC';
+
+    const [tickets] = await pool.query(query, params);
+
+    for (const ticket of tickets) {
+      const [items] = await pool.query(
+        `SELECT oi.*, COALESCE(p.image, '') as image, p.category
+         FROM order_items oi
+         LEFT JOIN products p ON oi.product_id = p.id
+         WHERE oi.order_id = ?`,
+        [ticket.id]
+      );
+      ticket.items = items;
+    }
+
+    const [counts] = await pool.query(`
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN return_status = 'Requested' THEN 1 ELSE 0 END) as requested,
+        SUM(CASE WHEN return_status = 'Approved' THEN 1 ELSE 0 END) as approved,
+        SUM(CASE WHEN return_status = 'Rejected' THEN 1 ELSE 0 END) as rejected
+      FROM orders
+      WHERE return_status IS NOT NULL
+    `);
+
+    res.json({ 
+      success: true, 
+      data: tickets, 
+      stats: { 
+        total: Number(counts[0]?.total || 0), 
+        requested: Number(counts[0]?.requested || 0), 
+        approved: Number(counts[0]?.approved || 0), 
+        rejected: Number(counts[0]?.rejected || 0) 
+      } 
+    });
+  } catch (err) {
+    console.error('Loi lay ticket doi tra:', err);
+    res.status(500).json({ success: false, message: 'Loi server khi lay danh sach ticket doi tra' });
+  }
+});
+
+app.put('/api/admin/orders/:id/return-status', async (req, res) => {
+  try {
+    const orderId = req.params.id;
+    const { return_status, admin_note } = req.body;
+    if (!['Approved', 'Rejected', 'Completed'].includes(return_status)) {
+      return res.status(400).json({ success: false, message: 'Trạng thái đổi trả không hợp lệ' });
+    }
+
+    await pool.query(
+      "UPDATE orders SET return_status = ?, return_note = COALESCE(?, return_note) WHERE id = ?",
+      [return_status, admin_note ? `[Admin]: ${admin_note}` : null, orderId]
+    );
+
+    res.json({
+      success: true,
+      message: `Đã cập nhật trạng thái đổi trả thành: ${return_status === 'Approved' ? 'Chấp thuận' : 'Từ chối'}`
+    });
+  } catch (err) {
+    console.error('Lỗi cập nhật return-status admin:', err);
+    res.status(500).json({ success: false, message: 'Lỗi server' });
   }
 });
 
@@ -1731,6 +2143,140 @@ app.get('/api/admin/stock-imports', async (req, res) => {
     res.status(500).json({ success: false, message: 'Lỗi lấy lịch sử nhập kho' });
   }
 });
+
+// ==========================================
+// TÍNH NĂNG TỰ ĐỘNG HÓA TIẾN TRÌNH ĐƠN HÀNG
+// ==========================================
+
+let isAutoProgressionActive = true;
+
+// API 21: Khách hàng tự xác nhận đã nhận được hàng (Buyer Confirmation)
+app.put('/api/orders/:id/confirm-receipt', async (req, res) => {
+  try {
+    const orderId = req.params.id;
+    const userId = req.body.userId || req.body.user_id;
+
+    const [orders] = await pool.query('SELECT * FROM orders WHERE id = ?', [orderId]);
+    if (orders.length === 0) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng' });
+    }
+
+    const order = orders[0];
+
+    // Kiểm tra quyền sở hữu đơn hàng
+    if (userId && order.user_id && Number(order.user_id) !== Number(userId)) {
+      return res.status(403).json({ success: false, message: 'Bạn không có quyền thao tác trên đơn hàng này' });
+    }
+
+    if (order.status === 'Completed') {
+      return res.json({ success: true, message: 'Đơn hàng này đã được hoàn tất trước đó', data: order });
+    }
+
+    if (order.status === 'Cancelled') {
+      return res.status(400).json({ success: false, message: 'Đơn hàng này đã bị hủy, không thể xác nhận nhận hàng' });
+    }
+
+    // Cập nhật trạng thái thành Completed
+    await pool.query("UPDATE orders SET status = 'Completed' WHERE id = ?", [orderId]);
+    const [updatedRows] = await pool.query('SELECT * FROM orders WHERE id = ?', [orderId]);
+
+    console.log(`[Buyer-Receipt]: Khách hàng #${userId || 'Guest'} đã xác nhận nhận hàng cho đơn #${orderId}`);
+
+    res.json({
+      success: true,
+      message: 'Xác nhận nhận hàng thành công! Cảm ơn bạn đã mua sắm tại ThoiTrangHD.',
+      data: updatedRows[0]
+    });
+  } catch (error) {
+    console.error('Lỗi xác nhận nhận hàng:', error);
+    res.status(500).json({ success: false, message: 'Lỗi server khi xác nhận nhận hàng' });
+  }
+});
+
+// API 22: Lấy & Cập nhật trạng thái tự động vận hành (Admin)
+app.get('/api/admin/auto-progression', (req, res) => {
+  res.json({ success: true, enabled: isAutoProgressionActive });
+});
+
+app.post('/api/admin/auto-progression', (req, res) => {
+  const { enabled } = req.body;
+  isAutoProgressionActive = Boolean(enabled);
+  console.log(`[Auto-Workflow]: Đã ${isAutoProgressionActive ? 'BẬT' : 'TẮT'} chế độ tự động hóa tiến trình đơn hàng.`);
+  res.json({
+    success: true,
+    enabled: isAutoProgressionActive,
+    message: isAutoProgressionActive 
+      ? 'Đã BẬT tự động duyệt & vận chuyển đơn hàng' 
+      : 'Đã TẮT tự động hóa, chuyển sang chế độ thủ công'
+  });
+});
+
+// API 23: Duyệt nhanh toàn bộ đơn chờ xác nhận (Bulk Confirm)
+app.post('/api/admin/orders/bulk-confirm', async (req, res) => {
+  try {
+    const [result] = await pool.query(
+      "UPDATE orders SET status = 'Processing' WHERE status = 'Pending'"
+    );
+    res.json({
+      success: true,
+      message: `Đã duyệt thành công ${result.affectedRows} đơn hàng sang trạng thái "Đang giao"!`,
+      affectedRows: result.affectedRows
+    });
+  } catch (err) {
+    console.error('Lỗi bulk-confirm:', err);
+    res.status(500).json({ success: false, message: 'Lỗi server khi duyệt hàng loạt' });
+  }
+});
+
+// API 24: Hoàn thành đơn hàng 1 chạm (Fast-Forward to Completed)
+app.put('/api/admin/orders/:id/fast-complete', async (req, res) => {
+  try {
+    const orderId = req.params.id;
+    const [curr] = await pool.query('SELECT status FROM orders WHERE id = ?', [orderId]);
+    if (curr.length === 0) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng' });
+    }
+    if (curr[0].status === 'Cancelled') {
+      return res.status(400).json({ success: false, message: 'Đơn đã hủy, không thể hoàn thành' });
+    }
+
+    await pool.query("UPDATE orders SET status = 'Completed' WHERE id = ?", [orderId]);
+    const [updated] = await pool.query('SELECT * FROM orders WHERE id = ?', [orderId]);
+
+    res.json({
+      success: true,
+      message: `Đơn hàng #${orderId} đã được hoàn tất thành công ngay lập tức!`,
+      data: updated[0]
+    });
+  } catch (err) {
+    console.error('Lỗi fast-complete:', err);
+    res.status(500).json({ success: false, message: 'Lỗi server khi hoàn tất đơn' });
+  }
+});
+
+// BACKGROUND RUNNER: Mô phỏng vận chuyển tự động thông minh (mỗi 15 giây kiểm tra 1 lần)
+setInterval(async () => {
+  if (!isAutoProgressionActive) return;
+  try {
+    // 1. Tự động chuyển đơn Pending > 20 giây sang Processing (Tự động xác nhận & xuất kho)
+    const [pendingRes] = await pool.query(
+      "UPDATE orders SET status = 'Processing' WHERE status = 'Pending' AND created_at <= NOW() - INTERVAL 20 SECOND"
+    );
+    if (pendingRes.affectedRows > 0) {
+      console.log(`[Auto-Workflow]: ⚡ Tự động xác nhận & xuất kho ${pendingRes.affectedRows} đơn hàng.`);
+    }
+
+    // 2. Tự động chuyển đơn Processing > 45 giây sang Completed (Mô phỏng shipper giao thành công)
+    const [processingRes] = await pool.query(
+      "UPDATE orders SET status = 'Completed' WHERE status = 'Processing' AND created_at <= NOW() - INTERVAL 50 SECOND"
+    );
+    if (processingRes.affectedRows > 0) {
+      console.log(`[Auto-Workflow]: 🚚 Mô phỏng shipper giao thành công ${processingRes.affectedRows} đơn hàng.`);
+    }
+  } catch (err) {
+    // Silent catch background timer error
+  }
+}, 15000);
 
 app.listen(port, () => {
   console.log(`🚀 Backend Server (MySQL Connected) đang chạy tại: http://localhost:${port}`);

@@ -268,20 +268,22 @@ export default function OrdersScreen() {
 
       {/* Search Bar */}
       <View style={styles.searchBarWrapper}>
-        <View style={styles.orderSearchBar}>
-          <IconSymbol name="magnifyingglass" size={18} color="#747878" />
-          <TextInput
-            style={styles.orderSearchInput}
-            placeholder="Tìm theo mã đơn hoặc tên sản phẩm..."
-            placeholderTextColor="#9ca3af"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <IconSymbol name="xmark" size={16} color="#747878" />
-            </TouchableOpacity>
-          )}
+        <View style={styles.searchBarInner}>
+          <View style={styles.orderSearchBar}>
+            <IconSymbol name="magnifyingglass" size={18} color="#747878" />
+            <TextInput
+              style={styles.orderSearchInput}
+              placeholder="Tìm theo mã đơn hoặc tên sản phẩm..."
+              placeholderTextColor="#9ca3af"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <IconSymbol name="xmark" size={16} color="#747878" />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
 
@@ -1386,24 +1388,35 @@ const styles = StyleSheet.create({
   },
   /* Search Bar */
   searchBarWrapper: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 4,
     backgroundColor: '#ffffff',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(196, 199, 199, 0.2)',
+    zIndex: 45,
+  },
+  searchBarInner: {
+    maxWidth: 860,
+    alignSelf: 'center',
+    width: '100%',
+    paddingHorizontal: 20,
   },
   orderSearchBar: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#f3f4f6',
     borderRadius: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     height: 42,
-    gap: 8,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
   orderSearchInput: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 14,
     color: '#1a1c1c',
+    height: '100%',
+    ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}),
   },
   /* Order Note & Cancel Badges */
   orderNoteBadgeRow: {

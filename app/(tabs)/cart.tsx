@@ -458,10 +458,15 @@ export default function CartScreen() {
                 </View>
 
                 <TouchableOpacity
-                  style={[styles.checkoutBtn, selectedItems.length === 0 && { opacity: 0.5 }]}
+                  style={[styles.checkoutBtn, (selectedItems.length === 0 || selectedItems.some(it => it.stock !== undefined && (it.stock <= 0 || it.quantity > it.stock))) && { opacity: 0.5 }]}
                   onPress={() => {
                     if (selectedItems.length === 0) {
                       showToast('Vui lòng chọn ít nhất 1 sản phẩm để mua hàng!', true);
+                      return;
+                    }
+                    const invalidStockItem = selectedItems.find(it => it.stock !== undefined && (it.stock <= 0 || it.quantity > it.stock));
+                    if (invalidStockItem) {
+                      showToast(`Sản phẩm "${invalidStockItem.name}" không đủ số lượng trong kho (${invalidStockItem.stock} chiếc). Vui lòng điều chỉnh lại!`, true);
                       return;
                     }
                     router.push('/checkout');

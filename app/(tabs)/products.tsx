@@ -3,7 +3,7 @@ import { API_URL } from '@/constants/config';
 import { useFavorites } from '@/contexts/FavoriteContext';
 import { useResponsive } from '@/hooks/useResponsive';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -24,6 +24,13 @@ type PriceRange = 'all' | 'under_500' | '500_1000' | 'over_1000';
 
 export default function ProductsScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ category?: string }>();
+
+  useEffect(() => {
+    if (params.category && typeof params.category === 'string') {
+      setActiveFilter(params.category);
+    }
+  }, [params.category]);
   const { isMobile, isTablet, isDesktop, isLargeScreen } = useResponsive();
   const { isFavorite, toggleFavorite } = useFavorites();
   const [products, setProducts] = useState<any[]>([]);
