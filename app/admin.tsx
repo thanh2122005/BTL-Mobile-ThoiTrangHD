@@ -1776,6 +1776,39 @@ export default function AdminScreen() {
                           </View>
                         )}
 
+                        {ticket.return_target_color && (
+                          <View style={[styles.returnDetailRow, { marginTop: 6 }]}>
+                            <Text style={styles.returnDetailLabel}>🎨 Màu muốn đổi sang:</Text>
+                            <View style={[styles.targetSizeChip, { backgroundColor: '#fdf4ff' }]}>
+                              <Text style={[styles.targetSizeText, { color: '#9333ea' }]}>{ticket.return_target_color}</Text>
+                            </View>
+                          </View>
+                        )}
+
+                        {ticket.return_images && (
+                          <View style={{ marginTop: 8 }}>
+                            <Text style={[styles.returnDetailLabel, { marginBottom: 6 }]}>📸 Ảnh minh chứng:</Text>
+                            <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                              {(() => {
+                                try {
+                                  const imgs = typeof ticket.return_images === 'string' ? JSON.parse(ticket.return_images) : ticket.return_images;
+                                  if (Array.isArray(imgs)) {
+                                    return imgs.map((imgUrl: string, imgIdx: number) => (
+                                      <Image
+                                        key={imgIdx}
+                                        source={getImageSource(imgUrl)}
+                                        style={{ width: 44, height: 44, borderRadius: 6, borderWidth: 1, borderColor: '#e2e8f0' }}
+                                        contentFit="cover"
+                                      />
+                                    ));
+                                  }
+                                } catch (e) {}
+                                return null;
+                              })()}
+                            </View>
+                          </View>
+                        )}
+
                         {ticket.return_note && (
                           <View style={[styles.returnDetailRow, { marginTop: 6 }]}>
                             <Text style={styles.returnDetailLabel}>📝 Ghi chú từ khách:</Text>

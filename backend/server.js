@@ -1932,8 +1932,15 @@ app.post('/api/orders/:id/return', async (req, res) => {
     }
 
     await pool.query(
-      "UPDATE orders SET return_reason = ?, return_target_size = ?, return_note = ?, return_status = 'Requested', status = 'Completed' WHERE id = ?",
-      [reason || 'Yêu cầu đổi trả', targetSize || null, note || null, orderId]
+      "UPDATE orders SET return_reason = ?, return_target_size = ?, return_target_color = ?, return_images = ?, return_note = ?, return_status = 'Requested', status = 'Completed' WHERE id = ?",
+      [
+        reason || 'Yêu cầu đổi trả',
+        targetSize || null,
+        targetColor || null,
+        images && images.length > 0 ? (typeof images === 'string' ? images : JSON.stringify(images)) : null,
+        note || null,
+        orderId
+      ]
     );
 
     res.json({ 

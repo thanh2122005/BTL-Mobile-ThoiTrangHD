@@ -97,6 +97,8 @@ interface OrderDetail {
   return_reason?: string | null;
   return_note?: string | null;
   return_target_size?: string | null;
+  return_target_color?: string | null;
+  return_images?: string | string[] | null;
   items: OrderItem[];
 }
 
@@ -116,7 +118,7 @@ export default function OrderDetailsScreen() {
   // Return / Warranty states
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [returnItem, setReturnItem] = useState<OrderItem | null>(null);
-  const [returnReason, setReturnReason] = useState<'size' | 'color' | 'defect' | 'wrong' | 'refund'>('size');
+  const [returnReason, setReturnReason] = useState<'size' | 'color' | 'both' | 'defect' | 'wrong' | 'refund'>('size');
   const [targetSize, setTargetSize] = useState('L');
   const [targetColor, setTargetColor] = useState('Xanh Navy');
   const [returnImages, setReturnImages] = useState<string[]>([]);
@@ -281,7 +283,14 @@ export default function OrderDetailsScreen() {
       const data = await res.json();
       if (data && data.success) {
         showToast('Đã gửi yêu cầu đổi trả thành công! CSKH sẽ liên hệ lại bạn trong 24h.');
-        setOrder((prev: any) => prev ? { ...prev, return_status: 'Requested', return_reason: reasonLabel } : prev);
+        setOrder((prev: any) => prev ? { 
+          ...prev, 
+          return_status: 'Requested', 
+          return_reason: reasonLabel,
+          return_target_size: (returnReason === 'size' || returnReason === 'both') ? targetSize : null,
+          return_target_color: (returnReason === 'color' || returnReason === 'both') ? targetColor : null,
+          return_note: returnNote.trim() || null,
+        } : prev);
       } else {
         showToast(data?.message || 'Không thể gửi yêu cầu đổi trả');
       }
@@ -703,7 +712,8 @@ export default function OrderDetailsScreen() {
                     <View style={styles.returnStatusDetailBox}>
                       <Text style={styles.returnStatusDetailTitle}>📦 Thông tin yêu cầu đổi trả bảo hành:</Text>
                       <Text style={styles.returnStatusDetailText}>• Lý do: {order.return_reason || 'Đổi trả hàng'}</Text>
-                      {order.return_target_size ? <Text style={styles.returnStatusDetailText}>• Đổi sang size: {order.return_target_size}</Text> : null}
+                      {order.return_target_size ? <Text style={styles.returnStatusDetailText}>• Đổi sang size: <Text style={{ fontWeight: '700', color: '#111827' }}>{order.return_target_size}</Text></Text> : null}
+                      {order.return_target_color ? <Text style={styles.returnStatusDetailText}>• Đổi sang màu: <Text style={{ fontWeight: '700', color: '#111827' }}>{getColorName(order.return_target_color)}</Text></Text> : null}
                       {order.return_note ? <Text style={styles.returnStatusDetailText}>• Ghi chú khách gửi: {order.return_note}</Text> : null}
                       <Text style={styles.returnStatusDetailNotice}>
                         {order.return_status === 'Requested' 
@@ -1029,7 +1039,7 @@ export default function OrderDetailsScreen() {
               </View>
 
               {/* Target Size selector synchronized with specific product variants */}
-              {returnReason === 'size' && (
+              {(returnReason === 'size' || returnReason === 'both') && (
                 <View style={{ marginBottom: 16 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <Text style={styles.formGroupLabel}>CHỌN SIZE BẠN MUỐN ĐỔI SANG:</Text>
@@ -1073,7 +1083,7 @@ export default function OrderDetailsScreen() {
               )}
 
               {/* Target Color selector synchronized with specific product variants */}
-              {returnReason === 'color' && (
+              {(returnReason === 'color' || returnReason === 'both') && (
                 <View style={{ marginBottom: 16 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <Text style={styles.formGroupLabel}>CHỌN MÀU SẮC BẠN MUỐN ĐỔI SANG:</Text>
