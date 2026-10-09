@@ -395,8 +395,8 @@ export default function ProductDetailScreen() {
     : product.price;
 
   const handleAddToCart = () => {
-    if (product.stock !== undefined && product.stock <= 0) {
-      showToast('Sản phẩm hiện đang tạm hết hàng');
+    if (currentVariantStock <= 0) {
+      showToast('Phân loại kích thước / màu sắc này hiện đã hết hàng');
       return;
     }
     addToCart({
@@ -407,14 +407,14 @@ export default function ProductDetailScreen() {
       quantity: 1,
       size: selectedSize,
       color: selectedColor,
-      stock: product.stock
+      stock: currentVariantStock
     });
     showToast('Đã thêm sản phẩm vào giỏ hàng');
   };
 
   const handleBuyNow = () => {
-    if (product.stock !== undefined && product.stock <= 0) {
-      showToast('Sản phẩm hiện đang tạm hết hàng');
+    if (currentVariantStock <= 0) {
+      showToast('Phân loại kích thước / màu sắc này hiện đã hết hàng');
       return;
     }
     addToCart({
@@ -425,7 +425,7 @@ export default function ProductDetailScreen() {
       quantity: 1,
       size: selectedSize,
       color: selectedColor,
-      stock: product.stock
+      stock: currentVariantStock
     });
     router.push('/checkout');
   };
@@ -528,14 +528,14 @@ export default function ProductDetailScreen() {
               <View style={styles.dotSeparator} />
               <Text style={styles.soldText}>Đã bán {product.sold_count !== undefined ? product.sold_count : 0}</Text>
               <View style={styles.dotSeparator} />
-              <View style={styles.stockBadge}>
+              <View style={[styles.stockBadge, currentVariantStock <= 0 && { backgroundColor: '#fef2f2' }]}>
                 <IconSymbol 
-                  name={product.stock !== undefined && product.stock > 0 ? "checkmark.circle.fill" : "exclamationmark.circle.fill"} 
+                  name={currentVariantStock > 0 ? "checkmark.circle.fill" : "exclamationmark.circle.fill"} 
                   size={13} 
-                  color={product.stock !== undefined && product.stock > 0 ? "#16a34a" : "#dc2626"} 
+                  color={currentVariantStock > 0 ? "#16a34a" : "#dc2626"} 
                 />
-                <Text style={[styles.stockBadgeText, (product.stock !== undefined && product.stock <= 0) && styles.stockBadgeTextOut]}>
-                  {product.stock !== undefined && product.stock > 0 ? `Kho: ${product.stock}` : 'Hết hàng'}
+                <Text style={[styles.stockBadgeText, currentVariantStock <= 0 && styles.stockBadgeTextOut]}>
+                  {currentVariantStock > 0 ? `Tồn kho: ${currentVariantStock}` : 'Tạm hết hàng'}
                 </Text>
               </View>
             </View>
@@ -862,12 +862,24 @@ export default function ProductDetailScreen() {
       {/* Action Bar (Pinned Bottom) */}
       <View style={[styles.bottomBar, isLargeScreen && styles.bottomBarLarge]}>
         <View style={styles.bottomBarInner}>
-          <TouchableOpacity style={styles.addToCartBtn} onPress={handleAddToCart}>
+          <TouchableOpacity 
+            style={[styles.addToCartBtn, currentVariantStock <= 0 && { opacity: 0.5 }]} 
+            onPress={handleAddToCart}
+            disabled={currentVariantStock <= 0}
+          >
             <IconSymbol name="bag.badge.plus" size={18} color="#000000" />
-            <Text style={styles.addToCartText}>Thêm vào giỏ</Text>
+            <Text style={styles.addToCartText}>
+              {currentVariantStock <= 0 ? 'Tạm hết hàng' : 'Thêm vào giỏ'}
+            </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.buyNowBtn} onPress={handleBuyNow}>
-            <Text style={styles.buyNowText}>Mua ngay</Text>
+          <TouchableOpacity 
+            style={[styles.buyNowBtn, currentVariantStock <= 0 && { backgroundColor: '#94a3b8' }]} 
+            onPress={handleBuyNow}
+            disabled={currentVariantStock <= 0}
+          >
+            <Text style={styles.buyNowText}>
+              {currentVariantStock <= 0 ? 'Hết hàng' : 'Mua ngay'}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>

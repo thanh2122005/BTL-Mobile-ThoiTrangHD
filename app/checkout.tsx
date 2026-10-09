@@ -212,7 +212,7 @@ export default function CheckoutScreen() {
       }
 
       const orderCode = data.orderCode || 'N/A';
-      router.replace(`/payment-success?orderCode=${orderCode}&total=${data.totalPrice || totalPrice}`);
+      router.replace(`/payment-success?orderCode=${orderCode}&total=${data.totalPrice || totalPrice}&paymentMethod=${paymentMethod}`);
     } catch (err: any) {
       console.error('Lỗi gửi đơn hàng:', err);
       setOrderError(err?.message || 'Không thể tạo đơn hàng vào lúc này. Vui lòng kiểm tra lại kết nối mạng.');

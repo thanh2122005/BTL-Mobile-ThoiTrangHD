@@ -855,19 +855,43 @@ export default function OrderDetailsScreen() {
                 
                 <View style={styles.paymentMethodBox}>
                   <IconSymbol 
-                    name={order.payment_method === 'banking' ? 'qrcode' : 'banknote'} 
+                    name={['bank', 'banking', 'vietqr'].includes((order.payment_method || '').toLowerCase()) ? 'qrcode' : 'banknote'} 
                     size={24} 
                     color="#000000" 
                   />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.paymentMethodText}>
-                      {order.payment_method === 'banking' ? 'Chuyển khoản VietQR' : 'Thanh toán khi nhận hàng (COD)'}
+                      {['bank', 'banking', 'vietqr'].includes((order.payment_method || '').toLowerCase()) ? 'Chuyển khoản VietQR 24/7' : 'Thanh toán khi nhận hàng (COD)'}
                     </Text>
                     <Text style={styles.paymentMethodSub}>
-                      {order.payment_method === 'banking' ? 'Đã liên kết tài khoản' : 'Thanh toán tiền mặt cho shipper'}
+                      {['bank', 'banking', 'vietqr'].includes((order.payment_method || '').toLowerCase()) 
+                        ? (order.status === 'Pending' ? 'Chờ thanh toán (Quét mã để chuyển)' : 'Đã thanh toán chuyển khoản') 
+                        : 'Thanh toán tiền mặt cho shipper'}
                     </Text>
                   </View>
                 </View>
+
+                {/* Show QR code if Pending Bank Transfer */}
+                {['bank', 'banking', 'vietqr'].includes((order.payment_method || '').toLowerCase()) && order.status === 'Pending' && (
+                  <View style={{ backgroundColor: '#f8fafc', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0', marginTop: 10 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#b45309', marginBottom: 6 }}>
+                      📲 Quét mã VietQR để thanh toán:
+                    </Text>
+                    <View style={{ alignItems: 'center', backgroundColor: '#ffffff', padding: 8, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', marginBottom: 8 }}>
+                      <Image 
+                        source={{ uri: `https://img.vietqr.io/image/MB-0988776655-compact2.png?amount=${totalPrice}&addInfo=${encodeURIComponent(order.order_code)}&accountName=THOI%20TRANG%20HD` }} 
+                        style={{ width: 180, height: 180 }} 
+                        contentFit="contain"
+                      />
+                    </View>
+                    <Text style={{ fontSize: 12, color: '#334155', lineHeight: 18 }}>
+                      • Ngân hàng: <Text style={{ fontWeight: '700' }}>MB Bank (Quân Đội)</Text>{'\n'}
+                      • Số tài khoản: <Text style={{ fontWeight: '700' }}>0988776655</Text>{'\n'}
+                      • Chủ TK: <Text style={{ fontWeight: '700' }}>CÔNG TY THỜI TRANG HD</Text>{'\n'}
+                      • Nội dung: <Text style={{ fontWeight: '700', color: '#b45309' }}>{order.order_code}</Text>
+                    </Text>
+                  </View>
+                )}
 
                 <View style={styles.summaryList}>
                   <View style={styles.summaryRow}>
