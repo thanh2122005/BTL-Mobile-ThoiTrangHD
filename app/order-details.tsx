@@ -125,6 +125,7 @@ export default function OrderDetailsScreen() {
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [returnNote, setReturnNote] = useState('');
   const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
+  const [isCancelingReturn, setIsCancelingReturn] = useState(false);
   const [returnProductVariants, setReturnProductVariants] = useState<any[]>([]);
   const [isLoadingVariants, setIsLoadingVariants] = useState(false);
 
@@ -222,10 +223,28 @@ export default function OrderDetailsScreen() {
   const handleOpenReturnModal = (item?: OrderItem) => {
     const it = item || (items.length > 0 ? items[0] : null);
     setReturnItem(it);
-    setReturnReason('size');
     setReturnImages([]);
-    setReturnNote('');
     setReturnProductVariants([]);
+
+    // Nếu đơn hàng đã có yêu cầu đổi trả đang xử lý (Requested), nạp lại đúng thông tin khách đã chọn
+    if (order?.return_status === 'Requested') {
+      setTargetSize(order.return_target_size || '');
+      setTargetColor(order.return_target_color || '');
+      setReturnNote(order.return_note || '');
+      if (order.return_target_size && order.return_target_color) {
+        setReturnReason('both');
+      } else if (order.return_target_color) {
+        setReturnReason('color');
+      } else {
+        setReturnReason('size');
+      }
+    } else {
+      // Yêu cầu đổi trả mới: để trống để người dùng chủ động chọn, không áp đặt mặc định ngầm
+      setTargetSize('');
+      setTargetColor('');
+      setReturnReason('size');
+      setReturnNote('');
+    }
 
     if (it?.product_id) {
       setIsLoadingVariants(true);
@@ -234,13 +253,6 @@ export default function OrderDetailsScreen() {
         .then((data) => {
           if (data && data.success && data.data?.variants && Array.isArray(data.data.variants)) {
             setReturnProductVariants(data.data.variants);
-            const distinctSizes = [...new Set(data.data.variants.map((v: any) => String(v.size)))];
-            const otherSize = distinctSizes.find((s) => s !== it.size) || distinctSizes[0] || 'L';
-            setTargetSize(String(otherSize));
-
-            const distinctColors = [...new Set(data.data.variants.map((v: any) => String(v.color)))];
-            const otherColor = distinctColors.find((c) => c !== it.color) || distinctColors[0] || 'Xanh Navy';
-            setTargetColor(String(otherColor));
           }
         })
         .catch((err) => {
@@ -254,13 +266,58 @@ export default function OrderDetailsScreen() {
     setShowReturnModal(true);
   };
 
+  const handleCancelReturn = async () => {
+    if (!order?.id) return;
+    setIsCancelingReturn(true);
+    try {
+      const res = await fetch(`${API_URL}/api/orders/${order.id}/cancel-return`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user?.id || order.user_id }),
+      });
+      const data = await res.json();
+      if (data && data.success) {
+        showToast('Đã hủy yêu cầu đổi trả thành công!');
+        setOrder((prev: any) => prev ? {
+          ...prev,
+          return_status: null,
+          return_reason: null,
+          return_target_size: null,
+          return_target_color: null,
+          return_images: null,
+          return_note: null,
+        } : prev);
+        setShowReturnModal(false);
+      } else {
+        showToast(data?.message || 'Không thể hủy yêu cầu đổi trả');
+      }
+    } catch (e) {
+      showToast('Lỗi khi hủy yêu cầu đổi trả');
+    } finally {
+      setIsCancelingReturn(false);
+    }
+  };
+
   const handleSubmitReturn = async () => {
     if (!order?.id) return;
+
+    if ((returnReason === 'size' || returnReason === 'both') && !targetSize) {
+      showToast('Vui lòng chọn size bạn muốn đổi sang');
+      return;
+    }
+
+    if ((returnReason === 'color' || returnReason === 'both') && !targetColor) {
+      showToast('Vui lòng chọn màu sắc bạn muốn đổi sang');
+      return;
+    }
+
     setIsSubmittingReturn(true);
     const reasonLabel = returnReason === 'size' 
       ? `Đổi sang size ${targetSize} (Mặc không vừa)`
       : returnReason === 'color'
       ? `Đổi sang màu ${targetColor}`
+      : returnReason === 'both'
+      ? `Đổi cả size ${targetSize} & màu ${targetColor}`
       : returnReason === 'defect'
       ? 'Lỗi sản xuất (Bung chỉ/hỏng khóa)'
       : returnReason === 'wrong'
@@ -273,8 +330,8 @@ export default function OrderDetailsScreen() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           reason: reasonLabel,
-          targetSize: returnReason === 'size' ? targetSize : null,
-          targetColor: returnReason === 'color' ? targetColor : null,
+          targetSize: (returnReason === 'size' || returnReason === 'both') ? targetSize : null,
+          targetColor: (returnReason === 'color' || returnReason === 'both') ? targetColor : null,
           images: returnImages,
           note: returnNote.trim(),
           userId: user?.id || order.user_id,
@@ -282,7 +339,7 @@ export default function OrderDetailsScreen() {
       });
       const data = await res.json();
       if (data && data.success) {
-        showToast('Đã gửi yêu cầu đổi trả thành công! CSKH sẽ liên hệ lại bạn trong 24h.');
+        showToast(data?.message || 'Đã gửi yêu cầu đổi trả thành công!');
         setOrder((prev: any) => prev ? { 
           ...prev, 
           return_status: 'Requested', 
@@ -974,7 +1031,9 @@ export default function OrderDetailsScreen() {
                 <View style={[styles.returnPolicyIconBadge, { backgroundColor: '#fffbeb' }]}>
                   <IconSymbol name="tag" size={14} color="#b78103" />
                 </View>
-                <Text style={styles.reviewModalTitle}>Yêu cầu Đổi trả & Bảo hành</Text>
+                <Text style={styles.reviewModalTitle}>
+                  {order?.return_status === 'Requested' ? 'Cập nhật yêu cầu Đổi trả & Bảo hành' : 'Yêu cầu Đổi trả & Bảo hành'}
+                </Text>
               </View>
               <TouchableOpacity
                 onPress={() => setShowReturnModal(false)}
@@ -1199,21 +1258,38 @@ export default function OrderDetailsScreen() {
             </ScrollView>
 
             <View style={styles.reviewModalFooter}>
+              {order?.return_status === 'Requested' ? (
+                <TouchableOpacity
+                  style={[styles.cancelReviewBtn, { borderColor: '#ef4444', backgroundColor: '#fef2f2' }]}
+                  onPress={handleCancelReturn}
+                  disabled={isSubmittingReturn || isCancelingReturn}
+                >
+                  {isCancelingReturn ? (
+                    <ActivityIndicator size="small" color="#ef4444" />
+                  ) : (
+                    <Text style={[styles.cancelReviewText, { color: '#ef4444', fontWeight: '700' }]}>HỦY YÊU CẦU</Text>
+                  )}
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.cancelReviewBtn}
+                  onPress={() => setShowReturnModal(false)}
+                  disabled={isSubmittingReturn}
+                >
+                  <Text style={styles.cancelReviewText}>Đóng</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
-                style={styles.cancelReviewBtn}
-                onPress={() => setShowReturnModal(false)}
-              >
-                <Text style={styles.cancelReviewText}>Đóng</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.submitReviewBtn, { backgroundColor: '#b78103' }]}
+                style={[styles.submitReviewBtn, { backgroundColor: '#b78103' }, (isSubmittingReturn || isCancelingReturn) && { opacity: 0.7 }]}
                 onPress={handleSubmitReturn}
-                disabled={isSubmittingReturn}
+                disabled={isSubmittingReturn || isCancelingReturn}
               >
                 {isSubmittingReturn ? (
                   <ActivityIndicator size="small" color="#ffffff" />
                 ) : (
-                  <Text style={styles.submitReviewText}>XÁC NHẬN GỬI YÊU CẦU</Text>
+                  <Text style={styles.submitReviewText}>
+                    {order?.return_status === 'Requested' ? 'LƯU THAY ĐỔI' : 'XÁC NHẬN GỬI YÊU CẦU'}
+                  </Text>
                 )}
               </TouchableOpacity>
             </View>

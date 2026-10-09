@@ -1879,6 +1879,38 @@ app.delete('/api/admin/vouchers/:code', async (req, res) => {
 // Khởi động server
 
 // API tiếp nhận yêu cầu Đổi trả / Bảo hành (KIỂM SOÁT NGHIỆP VỤ 7 NGÀY & ĐÃ GIAO THÀNH CÔNG)
+// API hủy yêu cầu đổi trả (khi còn đang ở trạng thái Requested)
+app.put('/api/orders/:id/cancel-return', async (req, res) => {
+  try {
+    const orderId = req.params.id;
+    const { userId } = req.body || {};
+
+    const [orders] = await pool.query('SELECT * FROM orders WHERE id = ?', [orderId]);
+    if (orders.length === 0) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng' });
+    }
+
+    const order = orders[0];
+    if (userId && order.user_id && Number(order.user_id) !== Number(userId)) {
+      return res.status(403).json({ success: false, message: 'Bạn không có quyền thực hiện thao tác này.' });
+    }
+
+    if (order.return_status !== 'Requested') {
+      return res.status(400).json({ success: false, message: 'Chỉ có thể hủy yêu cầu đổi trả khi đang chờ xử lý.' });
+    }
+
+    await pool.query(
+      "UPDATE orders SET return_reason = NULL, return_target_size = NULL, return_target_color = NULL, return_images = NULL, return_note = NULL, return_status = NULL WHERE id = ?",
+      [orderId]
+    );
+
+    res.json({ success: true, message: 'Đã hủy yêu cầu đổi trả thành công!' });
+  } catch (err) {
+    console.error('Lỗi hủy đổi trả:', err);
+    res.status(500).json({ success: false, message: 'Lỗi máy chủ khi hủy yêu cầu đổi trả' });
+  }
+});
+
 app.post('/api/orders/:id/return', async (req, res) => {
   try {
     const orderId = req.params.id;
@@ -1910,16 +1942,12 @@ app.post('/api/orders/:id/return', async (req, res) => {
       });
     }
 
-    // 3. Kiểm tra xem đã có yêu cầu đổi trả đang xử lý chưa
-    if (order.return_status === 'Requested') {
+    // 3. Kiểm tra trạng thái yêu cầu đổi trả
+    const isUpdate = order.return_status === 'Requested';
+    if (order.return_status === 'Approved') {
       return res.status(400).json({
         success: false,
-        message: 'Đơn hàng này đang có yêu cầu đổi trả chờ quản trị viên xử lý.'
-      });
-    } else if (order.return_status === 'Approved') {
-      return res.status(400).json({
-        success: false,
-        message: 'Yêu cầu đổi trả của đơn hàng này đã được chấp thuận trước đó.'
+        message: 'Yêu cầu đổi trả của đơn hàng này đã được chấp thuận trước đó, không thể chỉnh sửa thêm.'
       });
     }
 
@@ -1945,7 +1973,9 @@ app.post('/api/orders/:id/return', async (req, res) => {
 
     res.json({ 
       success: true, 
-      message: 'Đã tiếp nhận yêu cầu đổi trả bảo hành thành công! Bộ phận CSKH sẽ liên hệ trong 24h.' 
+      message: isUpdate 
+        ? 'Đã cập nhật yêu cầu đổi trả thành công!' 
+        : 'Đã tiếp nhận yêu cầu đổi trả bảo hành thành công! Bộ phận CSKH sẽ liên hệ trong 24h.' 
     });
   } catch (err) {
     console.error('Lỗi tiếp nhận đổi trả:', err);
