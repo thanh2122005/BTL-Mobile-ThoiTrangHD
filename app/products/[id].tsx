@@ -35,9 +35,57 @@ export default function ProductDetailScreen() {
   const [selectedSize, setSelectedSize] = useState('M');
   const [selectedColor, setSelectedColor] = useState('#000000');
 
+  const availableColors = useMemo(() => {
+    if (product?.variants && Array.isArray(product.variants) && product.variants.length > 0) {
+      const seen = new Set<string>();
+      const list: { code: string; name: string }[] = [];
+      for (const v of product.variants) {
+        const code = v.color_code || '#000000';
+        if (!seen.has(code)) {
+          seen.add(code);
+          list.push({ code, name: v.color || 'Màu tiêu chuẩn' });
+        }
+      }
+      if (list.length > 0) return list;
+    }
+    return [
+      { code: '#000000', name: 'Đen' },
+      { code: '#E5D3B3', name: 'Be' },
+      { code: '#1A237E', name: 'Xanh Navy' },
+    ];
+  }, [product]);
+
+  const availableSizes = useMemo(() => {
+    if (product?.variants && Array.isArray(product.variants) && product.variants.length > 0) {
+      const seen = new Set<string>();
+      const list: string[] = [];
+      for (const v of product.variants) {
+        const s = String(v.size || '');
+        if (s && !seen.has(s)) {
+          seen.add(s);
+          list.push(s);
+        }
+      }
+      if (list.length > 0) return list;
+    }
+    const isShoe = product?.category?.toLowerCase() === 'giày';
+    const isAccessory = product?.category?.toLowerCase() === 'phụ kiện';
+    return isShoe 
+      ? ['35', '36', '37', '38', '39', '40', '41', '42', '43'] 
+      : isAccessory 
+        ? ['Freesize'] 
+        : ['S', 'M', 'L', 'XL'];
+  }, [product]);
+
   const colorName = useMemo(() => {
-    return selectedColor === '#000000' ? 'Đen' : selectedColor === '#E5D3B3' ? 'Be' : 'Xanh Navy';
-  }, [selectedColor]);
+    const found = availableColors.find(c => c.code === selectedColor);
+    if (found) return found.name;
+    if (product?.variants && Array.isArray(product.variants)) {
+      const matched = product.variants.find((v: any) => v.color_code === selectedColor || v.color === selectedColor);
+      if (matched?.color) return matched.color;
+    }
+    return selectedColor === '#000000' ? 'Đen' : selectedColor === '#E5D3B3' ? 'Be' : selectedColor === '#FFFFFF' ? 'Trắng' : 'Màu tiêu chuẩn';
+  }, [selectedColor, availableColors, product]);
 
   const activeVariant = useMemo(() => {
     if (!product?.variants || !Array.isArray(product.variants)) return null;
@@ -231,7 +279,7 @@ export default function ProductDetailScreen() {
       const reviewerName = user?.name || newUserName.trim() || 'Khách hàng';
       const reviewerAvatar = user?.avatar || undefined;
 
-      const colorName = selectedColor === '#000000' ? 'Đen' : selectedColor === '#E5D3B3' ? 'Be' : 'Xanh';
+      const reviewColorName = colorName;
 
       const res = await fetch(`${API_URL}/api/products/${id}/reviews`, {
         method: 'POST',
@@ -243,7 +291,7 @@ export default function ProductDetailScreen() {
           rating: newRating,
           comment: newComment.trim(),
           size: selectedSize,
-          color: colorName,
+          color: reviewColorName,
         }),
       });
 
@@ -275,17 +323,23 @@ export default function ProductDetailScreen() {
       .then(res => res.json())
       .then(data => {
         if (data && data.success) {
-          setProduct(data.data);
-          // Set initial size based on category if current size is invalid
-          const isShoe = data.data.category?.toLowerCase() === 'giày';
-          const isAccessory = data.data.category?.toLowerCase() === 'phụ kiện';
-          const available = isShoe 
-            ? ['35', '36', '37', '38', '39', '40', '41', '42', '43'] 
-            : isAccessory 
-              ? ['Freesize'] 
-              : ['S', 'M', 'L', 'XL'];
-          if (!available.includes(selectedSize)) {
-            setSelectedSize(available[0]);
+          const prodData = data.data;
+          setProduct(prodData);
+          if (prodData.variants && Array.isArray(prodData.variants) && prodData.variants.length > 0) {
+            const first = prodData.variants[0];
+            if (first.size) setSelectedSize(String(first.size));
+            if (first.color_code) setSelectedColor(first.color_code);
+          } else {
+            const isShoe = prodData.category?.toLowerCase() === 'giày';
+            const isAccessory = prodData.category?.toLowerCase() === 'phụ kiện';
+            const available = isShoe 
+              ? ['35', '36', '37', '38', '39', '40', '41', '42', '43'] 
+              : isAccessory 
+                ? ['Freesize'] 
+                : ['S', 'M', 'L', 'XL'];
+            if (!available.includes(selectedSize)) {
+              setSelectedSize(available[0]);
+            }
           }
         } else {
           setProduct(null);
@@ -507,15 +561,19 @@ export default function ProductDetailScreen() {
             <View style={styles.optionSection}>
               <Text style={styles.optionTitle}>MÀU SẮC: <Text style={{ color: "#000000", fontWeight: "800" }}>{colorName}</Text></Text>
               <View style={styles.colorOptions}>
-                {['#000000', '#E5D3B3', '#1A237E'].map((color) => (
+                {availableColors.map((item) => (
                   <TouchableOpacity 
-                    key={color} 
+                    key={item.code} 
                     style={[
                       styles.colorCircle, 
-                      { backgroundColor: color },
-                      selectedColor === color && styles.colorCircleSelected
+                      { 
+                        backgroundColor: item.code,
+                        borderWidth: item.code.toLowerCase() === '#ffffff' ? 1 : 0,
+                        borderColor: '#d1d5db'
+                      },
+                      selectedColor === item.code && styles.colorCircleSelected
                     ]}
-                    onPress={() => setSelectedColor(color)}
+                    onPress={() => setSelectedColor(item.code)}
                   />
                 ))}
               </View>
@@ -530,31 +588,21 @@ export default function ProductDetailScreen() {
                 </TouchableOpacity>
               </View>
               <View style={styles.sizeOptions}>
-                {(() => {
-                  const isShoe = product?.category?.toLowerCase() === 'giày';
-                  const isAccessory = product?.category?.toLowerCase() === 'phụ kiện';
-                  const availableSizes = isShoe 
-                    ? ['35', '36', '37', '38', '39', '40', '41', '42', '43'] 
-                    : isAccessory 
-                      ? ['Freesize'] 
-                      : ['S', 'M', 'L', 'XL'];
-                  
-                  return availableSizes.map((size) => (
-                    <TouchableOpacity 
-                      key={size} 
-                      style={[
-                        styles.sizeBox,
-                        selectedSize === size && styles.sizeBoxSelected
-                      ]}
-                      onPress={() => setSelectedSize(size)}
-                    >
-                      <Text style={[
-                        styles.sizeText,
-                        selectedSize === size && styles.sizeTextSelected
-                      ]}>{size}</Text>
-                    </TouchableOpacity>
-                  ));
-                })()}
+                {availableSizes.map((size) => (
+                  <TouchableOpacity 
+                    key={size} 
+                    style={[
+                      styles.sizeBox,
+                      selectedSize === size && styles.sizeBoxSelected
+                    ]}
+                    onPress={() => setSelectedSize(size)}
+                  >
+                    <Text style={[
+                      styles.sizeText,
+                      selectedSize === size && styles.sizeTextSelected
+                    ]}>{size}</Text>
+                  </TouchableOpacity>
+                ))}
               </View>
             </View>
 
@@ -992,7 +1040,7 @@ export default function ProductDetailScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.reviewProductName} numberOfLines={1}>{product.name}</Text>
                   <Text style={styles.reviewProductMeta}>
-                    Phân loại: Size {selectedSize} | Màu {selectedColor === '#000000' ? 'Đen' : selectedColor === '#E5D3B3' ? 'Be' : 'Xanh'}
+                    Phân loại: Size {selectedSize} | Màu {colorName}
                   </Text>
                 </View>
               </View>
