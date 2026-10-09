@@ -910,7 +910,11 @@ export default function OrderDetailsScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={{ paddingHorizontal: 20, paddingVertical: 14 }} showsVerticalScrollIndicator={false}>
+            <ScrollView 
+              style={styles.reviewModalBody} 
+              contentContainerStyle={{ paddingBottom: 20 }}
+              showsVerticalScrollIndicator={true}
+            >
               {returnItem && (
                 <View style={styles.reviewItemBrief}>
                   <Image source={getImageSource(returnItem.image)} style={styles.reviewItemThumb} contentFit="cover" />
@@ -1977,32 +1981,42 @@ const styles = StyleSheet.create({
   /* Review Modal */
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 20,
   },
   reviewModalCard: {
     backgroundColor: '#ffffff',
     width: '100%',
     maxWidth: 520,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 28,
+    maxHeight: '88%',
+    borderRadius: 20,
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
     elevation: 20,
   },
   reviewModalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingBottom: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
+    backgroundColor: '#ffffff',
+    flexShrink: 0,
+  },
+  reviewModalBody: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
   },
   reviewModalTitle: {
     fontSize: 17,
@@ -2085,10 +2099,14 @@ const styles = StyleSheet.create({
   },
   reviewModalFooter: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
-    paddingTop: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
     borderTopWidth: 1,
     borderTopColor: '#f0f0f0',
+    backgroundColor: '#ffffff',
+    flexShrink: 0,
   },
   cancelReviewBtn: {
     flex: 1,
