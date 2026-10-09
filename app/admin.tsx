@@ -29,7 +29,7 @@ type OrderStatus = 'Pending' | 'Processing' | 'Completed' | 'Cancelled';
 
 export default function AdminScreen() {
   const router = useRouter();
-  const { isLargeScreen, isDesktop, width } = useResponsive();
+  const { isLargeScreen, isDesktop, isMobile, width } = useResponsive();
   const { user, isAdmin, isLoading: authLoading } = useAuth();
 
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
@@ -832,7 +832,9 @@ export default function AdminScreen() {
                   <Text style={styles.adminBadgeText}>ADMIN PORTAL</Text>
                 </View>
               </View>
-              <Text style={styles.headerSub}>Bảng điều khiển quản trị doanh nghiệp thời gian thực</Text>
+              <Text style={styles.headerSub} numberOfLines={1}>
+                {isMobile ? 'Quản trị hệ thống' : 'Bảng điều khiển quản trị doanh nghiệp thời gian thực'}
+              </Text>
             </View>
           </View>
 
@@ -844,7 +846,9 @@ export default function AdminScreen() {
               activeOpacity={0.8}
             >
               <IconSymbol name="bag" size={15} color="#0f172a" />
-              <Text style={styles.storefrontBtnText}>Xem Cửa Hàng</Text>
+              <Text style={styles.storefrontBtnText}>
+                {isMobile ? 'Cửa Hàng' : 'Xem Cửa Hàng'}
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -1018,7 +1022,7 @@ export default function AdminScreen() {
               {/* 7-DAY REVENUE BAR CHART & PIPELINE SECTION */}
               <View style={[styles.analyticsRow, isDesktop && styles.analyticsRowDesktop]}>
                 {/* 7-Day Interactive Bar Chart */}
-                <View style={[styles.cardContainer, { flex: 1.6 }]}>
+                <View style={[styles.cardContainer, isDesktop ? { flex: 1.6 } : { width: '100%' }]}>
                   <View style={styles.cardHeader}>
                     <View>
                       <Text style={styles.cardTitle}>Biểu Đồ Doanh Thu 7 Ngày Gần Nhất</Text>
@@ -1068,7 +1072,7 @@ export default function AdminScreen() {
                 </View>
 
                 {/* Pipeline Trạng Thái Đơn Hàng */}
-                <View style={[styles.cardContainer, { flex: 1 }]}>
+                <View style={[styles.cardContainer, isDesktop ? { flex: 1 } : { width: '100%' }]}>
                   <View style={styles.cardHeader}>
                     <View>
                       <Text style={styles.cardTitle}>Phân Bổ Trạng Thái Đơn</Text>
@@ -1076,45 +1080,62 @@ export default function AdminScreen() {
                     </View>
                   </View>
 
-                  {/* Multi-segment Progress Bar */}
+                  {/* Multi-segment Progress Bar - Percentage width based, never overflows */}
                   <View style={styles.pipelineBar}>
                     {stats.totalOrders > 0 ? (
-                      <>
-                        <View
-                          style={{
-                            flex: Math.max(stats.pendingOrders, 0.05),
-                            backgroundColor: '#f59e0b',
-                            height: '100%',
-                          }}
-                        />
-                        <View
-                          style={{
-                            flex: Math.max(stats.processingOrders, 0.05),
-                            backgroundColor: '#3b82f6',
-                            height: '100%',
-                          }}
-                        />
-                        <View
-                          style={{
-                            flex: Math.max(stats.completedOrders, 0.05),
-                            backgroundColor: '#10b981',
-                            height: '100%',
-                          }}
-                        />
-                        <View
-                          style={{
-                            flex: Math.max(stats.cancelledOrders, 0.05),
-                            backgroundColor: '#ef4444',
-                            height: '100%',
-                          }}
-                        />
-                      </>
+                      (() => {
+                        const total = stats.totalOrders;
+                        const pendingPct = (stats.pendingOrders / total) * 100;
+                        const processingPct = (stats.processingOrders / total) * 100;
+                        const completedPct = (stats.completedOrders / total) * 100;
+                        const cancelledPct = (stats.cancelledOrders / total) * 100;
+                        return (
+                          <>
+                            {pendingPct > 0 && (
+                              <View
+                                style={{
+                                  width: `${pendingPct}%`,
+                                  backgroundColor: '#f59e0b',
+                                  height: '100%',
+                                }}
+                              />
+                            )}
+                            {processingPct > 0 && (
+                              <View
+                                style={{
+                                  width: `${processingPct}%`,
+                                  backgroundColor: '#3b82f6',
+                                  height: '100%',
+                                }}
+                              />
+                            )}
+                            {completedPct > 0 && (
+                              <View
+                                style={{
+                                  width: `${completedPct}%`,
+                                  backgroundColor: '#10b981',
+                                  height: '100%',
+                                }}
+                              />
+                            )}
+                            {cancelledPct > 0 && (
+                              <View
+                                style={{
+                                  width: `${cancelledPct}%`,
+                                  backgroundColor: '#ef4444',
+                                  height: '100%',
+                                }}
+                              />
+                            )}
+                          </>
+                        );
+                      })()
                     ) : (
-                      <View style={{ flex: 1, backgroundColor: '#f1f5f9', height: '100%' }} />
+                      <View style={{ width: '100%', backgroundColor: '#f1f5f9', height: '100%' }} />
                     )}
                   </View>
 
-                  {/* Status Breakdown Legend */}
+                  {/* Status Breakdown Legend - Robust flex layout, badges never cut off */}
                   <View style={styles.statusLegendList}>
                     {[
                       { label: 'Chờ xác nhận', count: stats.pendingOrders, color: '#f59e0b', bg: '#fef3c7' },
@@ -1123,9 +1144,11 @@ export default function AdminScreen() {
                       { label: 'Đã hủy đơn', count: stats.cancelledOrders, color: '#ef4444', bg: '#fef2f2' },
                     ].map((st) => (
                       <View key={st.label} style={styles.statusLegendItem}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <View style={styles.statusLegendLabelCol}>
                           <View style={[styles.statusColorSquare, { backgroundColor: st.color }]} />
-                          <Text style={styles.statusLegendLabel}>{st.label}</Text>
+                          <Text style={styles.statusLegendLabel} numberOfLines={1}>
+                            {st.label}
+                          </Text>
                         </View>
                         <View style={[styles.statusCountBadge, { backgroundColor: st.bg }]}>
                           <Text style={[styles.statusCountText, { color: st.color }]}>
@@ -1141,7 +1164,7 @@ export default function AdminScreen() {
               {/* TOP BEST SELLERS & RECENT ORDERS */}
               <View style={[styles.analyticsRow, isDesktop && styles.analyticsRowDesktop]}>
                 {/* Top Best Sellers */}
-                <View style={[styles.cardContainer, { flex: 1 }]}>
+                <View style={[styles.cardContainer, isDesktop ? { flex: 1 } : { width: '100%' }]}>
                   <View style={styles.cardHeader}>
                     <View>
                       <Text style={styles.cardTitle}>Top Sản Phẩm Bán Chạy Nhất</Text>
@@ -1194,7 +1217,7 @@ export default function AdminScreen() {
                 </View>
 
                 {/* Recent Orders Action Queue */}
-                <View style={[styles.cardContainer, { flex: 1 }]}>
+                <View style={[styles.cardContainer, isDesktop ? { flex: 1 } : { width: '100%' }]}>
                   <View style={styles.cardHeader}>
                     <View>
                       <Text style={styles.cardTitle}>Đơn Hàng Mới Cần Xử Lý</Text>
@@ -3669,7 +3692,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
   },
   scrollContent: {
-    padding: 20,
+    padding: 12,
+    width: '100%',
   },
   tabContent: {
     gap: 20,
@@ -3679,11 +3703,12 @@ const styles = StyleSheet.create({
   metricsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 14,
+    gap: 12,
+    width: '100%',
   },
   metricCard: {
     flex: 1,
-    minWidth: 220,
+    minWidth: 150,
     backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 18,
@@ -3746,6 +3771,7 @@ const styles = StyleSheet.create({
   analyticsRow: {
     flexDirection: 'column',
     gap: 16,
+    width: '100%',
   },
   analyticsRowDesktop: {
     flexDirection: 'row',
@@ -3753,7 +3779,7 @@ const styles = StyleSheet.create({
   cardContainer: {
     backgroundColor: '#ffffff',
     borderRadius: 12,
-    padding: 20,
+    padding: 16,
     borderWidth: 1,
     borderColor: '#e2e8f0',
     shadowColor: '#000',
@@ -3761,6 +3787,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.03,
     shadowRadius: 3,
     elevation: 1,
+    width: '100%',
+    maxWidth: '100%',
+    overflow: 'hidden',
   },
   cardHeader: {
     flexDirection: 'row',
@@ -3852,31 +3881,47 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     overflow: 'hidden',
     flexDirection: 'row',
-    marginBottom: 20,
+    marginBottom: 18,
     marginTop: 8,
+    width: '100%',
+    backgroundColor: '#f1f5f9',
   },
   statusLegendList: {
-    gap: 10,
+    gap: 12,
+    width: '100%',
   },
   statusLegendItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    width: '100%',
+    minHeight: 28,
+  },
+  statusLegendLabelCol: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+    minWidth: 0,
+    marginRight: 8,
   },
   statusColorSquare: {
     width: 10,
     height: 10,
     borderRadius: 2,
+    flexShrink: 0,
   },
   statusLegendLabel: {
     fontSize: 13,
     color: '#334155',
     fontWeight: '500',
+    flexShrink: 1,
   },
   statusCountBadge: {
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 5,
+    flexShrink: 0,
   },
   statusCountText: {
     fontSize: 11,
