@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -18,7 +18,7 @@ import { useResponsive } from '@/hooks/useResponsive';
 
 export default function RegisterScreen() {
   const router = useRouter();
-  const { register } = useAuth();
+  const { register, user } = useAuth();
   const { isDesktop, isTablet } = useResponsive();
 
   const [name, setName] = useState('');
@@ -29,6 +29,12 @@ export default function RegisterScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  useEffect(() => {
+    if (user) {
+      router.replace('/(tabs)/user');
+    }
+  }, [user]);
 
   const handleRegister = async () => {
     setErrorMsg('');
@@ -72,7 +78,7 @@ export default function RegisterScreen() {
           {/* Back Button */}
           <TouchableOpacity
             style={styles.backBtn}
-            onPress={() => (router.canGoBack() ? router.back() : router.replace('/login'))}
+            onPress={() => router.replace('/(tabs)/user')}
           >
             <IconSymbol name="arrow.left" size={22} color="#1a1c1c" />
           </TouchableOpacity>
@@ -202,7 +208,7 @@ export default function RegisterScreen() {
             {/* Login Prompt */}
             <View style={styles.loginPrompt}>
               <Text style={styles.promptText}>Đã có tài khoản?</Text>
-              <TouchableOpacity onPress={() => router.push('/login')}>
+              <TouchableOpacity onPress={() => router.replace('/login')}>
                 <Text style={styles.loginLink}>Đăng nhập</Text>
               </TouchableOpacity>
             </View>

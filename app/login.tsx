@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -19,7 +19,7 @@ import { useResponsive } from '@/hooks/useResponsive';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, user } = useAuth();
   const { isDesktop, isTablet } = useResponsive();
 
   const [email, setEmail] = useState('');
@@ -27,6 +27,12 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  useEffect(() => {
+    if (user) {
+      router.replace('/(tabs)/user');
+    }
+  }, [user]);
 
   const handleLogin = async () => {
     setErrorMsg('');
@@ -40,11 +46,7 @@ export default function LoginScreen() {
     setLoading(false);
 
     if (res.success) {
-      if (router.canGoBack()) {
-        router.back();
-      } else {
-        router.replace('/(tabs)/user');
-      }
+      router.replace('/(tabs)/user');
     } else {
       setErrorMsg(res.message || 'Email hoặc mật khẩu không chính xác.');
     }
@@ -66,7 +68,7 @@ export default function LoginScreen() {
           {/* Back Button */}
           <TouchableOpacity
             style={styles.backBtn}
-            onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/user'))}
+            onPress={() => router.replace('/(tabs)/user')}
           >
             <IconSymbol name="arrow.left" size={22} color="#1a1c1c" />
           </TouchableOpacity>
@@ -149,7 +151,7 @@ export default function LoginScreen() {
             {/* Register Link */}
             <View style={styles.registerPrompt}>
               <Text style={styles.promptText}>Chưa có tài khoản?</Text>
-              <TouchableOpacity onPress={() => router.push('/register')}>
+              <TouchableOpacity onPress={() => router.replace('/register')}>
                 <Text style={styles.registerLink}>Đăng ký ngay</Text>
               </TouchableOpacity>
             </View>
