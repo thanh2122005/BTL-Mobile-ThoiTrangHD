@@ -1882,7 +1882,7 @@ app.delete('/api/admin/vouchers/:code', async (req, res) => {
 app.post('/api/orders/:id/return', async (req, res) => {
   try {
     const orderId = req.params.id;
-    const { reason, targetSize, note, userId } = req.body;
+    const { reason, targetSize, targetColor, images, note, userId } = req.body;
 
     const [orders] = await pool.query('SELECT * FROM orders WHERE id = ?', [orderId]);
     if (orders.length === 0) {

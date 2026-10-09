@@ -21,7 +21,50 @@ import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/contexts/AuthContext';
 
 import { getImageSource } from '@/constants/images';
+import * as ImagePicker from 'expo-image-picker';
 
+
+const COLOR_NAMES_MAP: Record<string, string> = {
+  '#000000': 'Đen',
+  '#ffffff': 'Trắng',
+  '#1a237e': 'Xanh Navy',
+  '#1A237E': 'Xanh Navy',
+  '#757575': 'Ghi Xám',
+  '#9e9e9e': 'Xám Bạc',
+  '#f5f5dc': 'Be / Kem',
+  '#F5F5DC': 'Be / Kem',
+  '#2e7d32': 'Xanh Rêu',
+  '#2E7D32': 'Xanh Rêu',
+  '#880e4f': 'Đỏ Đô',
+  '#880E4F': 'Đỏ Đô',
+  '#3b82f6': 'Xanh Dương',
+  '#e11d48': 'Đỏ Hồng',
+  '#d97706': 'Vàng Bò / Nâu Cam',
+  '#4b5563': 'Xám Đậm',
+  '#1e293b': 'Xanh Đen',
+  '#854d0e': 'Nâu Tây',
+  '#78350f': 'Nâu Đất',
+  '#312e81': 'Tím Than',
+};
+
+const getColorName = (color?: string) => {
+  if (!color) return 'Tiêu chuẩn';
+  const clean = color.trim().toLowerCase();
+  const found = Object.entries(COLOR_NAMES_MAP).find(([k]) => k.toLowerCase() === clean);
+  if (found) return found[1];
+  if (color.startsWith('#')) return 'Màu ' + color;
+  return color;
+};
+
+const AVAILABLE_RETURN_COLORS = [
+  { name: 'Đen', hex: '#000000' },
+  { name: 'Xanh Navy', hex: '#1A237E' },
+  { name: 'Ghi Xám', hex: '#757575' },
+  { name: 'Trắng', hex: '#ffffff' },
+  { name: 'Be / Kem', hex: '#F5F5DC' },
+  { name: 'Xanh Rêu', hex: '#2E7D32' },
+  { name: 'Đỏ Đô', hex: '#880e4f' },
+];
 
 const formatVND = (num: number) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(num || 0);
 
@@ -73,10 +116,67 @@ export default function OrderDetailsScreen() {
   // Return / Warranty states
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [returnItem, setReturnItem] = useState<OrderItem | null>(null);
-  const [returnReason, setReturnReason] = useState<'size' | 'color' | 'defect' | 'wrong'>('size');
+  const [returnReason, setReturnReason] = useState<'size' | 'color' | 'defect' | 'wrong' | 'refund'>('size');
   const [targetSize, setTargetSize] = useState('L');
+  const [targetColor, setTargetColor] = useState('Xanh Navy');
+  const [returnImages, setReturnImages] = useState<string[]>([]);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [returnNote, setReturnNote] = useState('');
   const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
+
+  const handlePickReturnImage = async () => {
+    if (returnImages.length >= 3) {
+      showToast('Tối đa 3 ảnh minh chứng');
+      return;
+    }
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        setIsUploadingImage(true);
+        const formData = new FormData();
+        
+        const filename = asset.fileName || `return_${Date.now()}.jpg`;
+        if (Platform.OS === 'web') {
+          const resp = await fetch(asset.uri);
+          const blob = await resp.blob();
+          formData.append('image', blob, filename);
+        } else {
+          formData.append('image', {
+            uri: asset.uri.replace('file://', ''),
+            name: filename,
+            type: asset.mimeType || 'image/jpeg',
+          } as any);
+        }
+
+        const res = await fetch(`${API_URL}/api/upload`, {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await res.json();
+        if (data.success && data.url) {
+          setReturnImages(prev => [...prev, data.url]);
+          showToast('Đã tải ảnh minh chứng');
+        } else {
+          setReturnImages(prev => [...prev, asset.uri]);
+        }
+      }
+    } catch (e) {
+      console.error('Lỗi chọn ảnh đổi trả:', e);
+      showToast('Không thể chọn ảnh');
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  const handleRemoveReturnImage = (idx: number) => {
+    setReturnImages(prev => prev.filter((_, i) => i !== idx));
+  };
 
   const handleOpenReturnModal = (item?: OrderItem) => {
     const it = item || (items.length > 0 ? items[0] : null);
@@ -93,12 +193,12 @@ export default function OrderDetailsScreen() {
     const reasonLabel = returnReason === 'size' 
       ? `Đổi sang size ${targetSize} (Mặc không vừa)`
       : returnReason === 'color'
-      ? 'Đổi sang màu khác'
+      ? `Đổi sang màu ${targetColor}`
       : returnReason === 'defect'
       ? 'Lỗi sản xuất (Bung chỉ/hỏng khóa)'
       : returnReason === 'wrong'
       ? 'Giao sai mẫu / size so với đơn'
-      : 'Trả hàng & hoàn tiền (Không ưng ý/lỗi)';
+      : 'Trả hàng & hoàn tiền (Không đúng mô tả / không ưng ý)';
 
     try {
       const res = await fetch(`${API_URL}/api/orders/${order.id}/return`, {
@@ -107,7 +207,10 @@ export default function OrderDetailsScreen() {
         body: JSON.stringify({
           reason: reasonLabel,
           targetSize: returnReason === 'size' ? targetSize : null,
+          targetColor: returnReason === 'color' ? targetColor : null,
+          images: returnImages,
           note: returnNote.trim(),
+          userId: user?.id || order.user_id,
         }),
       });
       const data = await res.json();
@@ -560,7 +663,7 @@ export default function OrderDetailsScreen() {
                         <View style={styles.itemDetails}>
                           <Text style={styles.itemName} numberOfLines={2}>{item.product_name}</Text>
                           <Text style={styles.itemVariant}>
-                            Size: {item.size || 'M'} | Màu: {item.color === '#000000' ? 'Đen' : item.color || 'Tiêu chuẩn'}
+                            Size: {item.size || 'M'} | Màu: {getColorName(item.color)}
                           </Text>
                           <View style={styles.itemFooter}>
                             <Text style={styles.itemPrice}>{formatVND(item.price)}</Text>
@@ -813,9 +916,19 @@ export default function OrderDetailsScreen() {
                   <Image source={getImageSource(returnItem.image)} style={styles.reviewItemThumb} contentFit="cover" />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.reviewItemName} numberOfLines={1}>{returnItem.product_name}</Text>
-                    <Text style={styles.reviewItemMeta}>
-                      Đang mua: Size {returnItem.size || 'M'} | Màu {returnItem.color === '#000000' ? 'Đen' : returnItem.color || 'Tiêu chuẩn'}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                      <Text style={styles.reviewItemMeta}>
+                        Đang mua: Size <Text style={{ fontWeight: '700', color: '#111827' }}>{returnItem.size || 'M'}</Text> | Màu: <Text style={{ fontWeight: '700', color: '#111827' }}>{getColorName(returnItem.color)}</Text>
+                      </Text>
+                      <View style={{
+                        width: 12,
+                        height: 12,
+                        borderRadius: 6,
+                        backgroundColor: returnItem.color?.startsWith('#') ? returnItem.color : '#000000',
+                        borderWidth: 1,
+                        borderColor: '#d1d5db'
+                      }} />
+                    </View>
                   </View>
                 </View>
               )}
@@ -846,28 +959,126 @@ export default function OrderDetailsScreen() {
                 })}
               </View>
 
-              {/* Target Size selector if reason is size */}
+              {/* Target Size selector with 2 distinct rows: Chữ & Số */}
               {returnReason === 'size' && (
-                <View style={{ marginBottom: 14 }}>
+                <View style={{ marginBottom: 16 }}>
                   <Text style={styles.formGroupLabel}>CHỌN SIZE BẠN MUỐN ĐỔI SANG:</Text>
-                  <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-                    {['S', 'M', 'L', 'XL', '38', '39', '40', '41', '42'].map((sz) => {
-                      const isSel = targetSize === sz;
+                  
+                  {/* Row 1: Size Chữ */}
+                  <View style={styles.sizeCategoryBox}>
+                    <Text style={styles.sizeCategoryLabel}>👕 Size Chữ (Áo sơ mi, Vest, Polo, Áo thun):</Text>
+                    <View style={styles.sizeRowContainer}>
+                      {['S', 'M', 'L', 'XL', '2XL', '3XL'].map((sz) => {
+                        const isSel = targetSize === sz;
+                        return (
+                          <TouchableOpacity
+                            key={sz}
+                            style={[styles.sizeOptionChip, isSel && styles.sizeOptionChipActive]}
+                            onPress={() => setTargetSize(sz)}
+                          >
+                            <Text style={[styles.sizeOptionChipText, isSel && styles.sizeOptionChipTextActive]}>
+                              {sz}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  {/* Row 2: Size Số */}
+                  <View style={[styles.sizeCategoryBox, { marginTop: 10 }]}>
+                    <Text style={styles.sizeCategoryLabel}>👞 Size Số (Quần âu, Quần Jean, Giày dép):</Text>
+                    <View style={styles.sizeRowContainer}>
+                      {['38', '39', '40', '41', '42', '43'].map((sz) => {
+                        const isSel = targetSize === sz;
+                        return (
+                          <TouchableOpacity
+                            key={sz}
+                            style={[styles.sizeOptionChip, isSel && styles.sizeOptionChipActive]}
+                            onPress={() => setTargetSize(sz)}
+                          >
+                            <Text style={[styles.sizeOptionChipText, isSel && styles.sizeOptionChipTextActive]}>
+                              {sz}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {/* Target Color selector when reason is color */}
+              {returnReason === 'color' && (
+                <View style={{ marginBottom: 16 }}>
+                  <Text style={styles.formGroupLabel}>CHỌN MÀU SẮC BẠN MUỐN ĐỔI SANG:</Text>
+                  <View style={styles.colorGridContainer}>
+                    {AVAILABLE_RETURN_COLORS.map((c) => {
+                      const isSel = targetColor === c.name;
                       return (
                         <TouchableOpacity
-                          key={sz}
-                          style={[styles.sizeOptionChip, isSel && styles.sizeOptionChipActive]}
-                          onPress={() => setTargetSize(sz)}
+                          key={c.name}
+                          style={[styles.colorOptionChip, isSel && styles.colorOptionChipActive]}
+                          onPress={() => setTargetColor(c.name)}
+                          activeOpacity={0.8}
                         >
-                          <Text style={[styles.sizeOptionChipText, isSel && styles.sizeOptionChipTextActive]}>
-                            {sz}
+                          <View style={[styles.colorSwatchDot, { backgroundColor: c.hex }]} />
+                          <Text style={[styles.colorOptionChipText, isSel && styles.colorOptionChipTextActive]}>
+                            {c.name}
                           </Text>
+                          {isSel && (
+                            <IconSymbol name="checkmark" size={14} color="#b45309" />
+                          )}
                         </TouchableOpacity>
                       );
                     })}
                   </View>
                 </View>
               )}
+
+              {/* Image Evidence Upload (Optional) */}
+              <View style={{ marginBottom: 16 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <Text style={styles.formGroupLabel}>ẢNH MINH CHỨNG (TÙY CHỌN):</Text>
+                  <Text style={{ fontSize: 11, color: '#6b7280' }}>Tối đa 3 ảnh</Text>
+                </View>
+                <Text style={{ fontSize: 12, color: '#6b7280', marginBottom: 8, lineHeight: 16 }}>
+                  Chụp tem mác hoặc chi tiết cần đổi (Bạn có thể gửi kèm hoặc không, phiếu đổi trả vẫn được tiếp nhận).
+                </Text>
+
+                <View style={styles.imagePickerRow}>
+                  {returnImages.map((uri, idx) => (
+                    <View key={idx} style={styles.returnImageThumbBox}>
+                      <Image source={getImageSource(uri)} style={styles.returnImageThumb} contentFit="cover" />
+                      <TouchableOpacity
+                        style={styles.removeImageBtn}
+                        onPress={() => handleRemoveReturnImage(idx)}
+                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      >
+                        <IconSymbol name="xmark" size={12} color="#ffffff" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+
+                  {returnImages.length < 3 && (
+                    <TouchableOpacity
+                      style={styles.addReturnImageBtn}
+                      onPress={handlePickReturnImage}
+                      disabled={isUploadingImage}
+                      activeOpacity={0.8}
+                    >
+                      {isUploadingImage ? (
+                        <ActivityIndicator size="small" color="#111827" />
+                      ) : (
+                        <>
+                          <IconSymbol name="camera.fill" size={20} color="#4b5563" />
+                          <Text style={styles.addReturnImageText}>+ Tải ảnh</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
 
               {/* Detail note */}
               <Text style={styles.formGroupLabel}>MÔ TẢ CHI TIẾT / GHI CHÚ CHO SHOP:</Text>
@@ -1659,6 +1870,109 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     letterSpacing: 0.3,
+  },
+  /* Size Selection by Category (Chữ vs Số) */
+  sizeCategoryBox: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    padding: 10,
+  },
+  sizeCategoryLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  sizeRowContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  /* Color Selection Grid */
+  colorGridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  colorOptionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#ffffff',
+  },
+  colorOptionChipActive: {
+    borderColor: '#d97706',
+    backgroundColor: '#fffbeb',
+  },
+  colorSwatchDot: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  colorOptionChipText: {
+    fontSize: 13,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  colorOptionChipTextActive: {
+    color: '#b45309',
+    fontWeight: '700',
+  },
+  /* Return Image Picker */
+  imagePickerRow: {
+    flexDirection: 'row',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  returnImageThumbBox: {
+    position: 'relative',
+    width: 72,
+    height: 72,
+    borderRadius: 10,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  returnImageThumb: {
+    width: '100%',
+    height: '100%',
+  },
+  removeImageBtn: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addReturnImageBtn: {
+    width: 72,
+    height: 72,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: '#9ca3af',
+    backgroundColor: '#f9fafb',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  addReturnImageText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#4b5563',
   },
   /* Review Modal */
   modalOverlay: {
