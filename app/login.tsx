@@ -159,15 +159,31 @@ export default function LoginScreen() {
             {/* Quick Demo Credentials */}
             <View style={styles.demoBox}>
               <Text style={styles.demoTitle}>Tài khoản mẫu để thử nghiệm nhanh:</Text>
-              <TouchableOpacity
-                onPress={() => {
-                  setEmail('test@thoitranghd.com');
-                  setPassword('123456');
-                }}
-                style={styles.demoChip}
-              >
-                <Text style={styles.demoChipText}>test@thoitranghd.com / 123456 (Nhấn để điền)</Text>
-              </TouchableOpacity>
+              <View style={{ gap: 8, marginTop: 4 }}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setEmail('test@thoitranghd.com');
+                    setPassword('123456');
+                  }}
+                  style={styles.demoChip}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.demoChipText, { fontWeight: '700' }]}>👤 Khách hàng (User):</Text>
+                  <Text style={styles.demoChipText}>test@thoitranghd.com / 123456</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => {
+                    setEmail('admin@thoitranghd.com');
+                    setPassword('admin123');
+                  }}
+                  style={[styles.demoChip, { borderColor: '#0f172a', backgroundColor: '#f8fafc' }]}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.demoChipText, { fontWeight: '700', color: '#0f172a' }]}>🛡️ Quản trị viên (Admin):</Text>
+                  <Text style={styles.demoChipText}>admin@thoitranghd.com / admin123</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </ScrollView>

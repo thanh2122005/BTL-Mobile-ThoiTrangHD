@@ -1,4 +1,4 @@
-import { StyleSheet, View, SafeAreaView, TouchableOpacity, ScrollView, Text, Switch } from 'react-native';
+import { StyleSheet, View, SafeAreaView, TouchableOpacity, ScrollView, Text, Switch, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -14,6 +14,8 @@ export default function SettingsScreen() {
   const [faceId, setFaceId] = useState(true);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [infoModal, setInfoModal] = useState<{ title: string; content: string } | null>(null);
 
   const handleLogout = () => {
     setShowLogoutModal(true);
@@ -27,13 +29,19 @@ export default function SettingsScreen() {
     router.replace('/(tabs)/user');
   };
 
+  const confirmDeleteAccount = async () => {
+    setShowDeleteModal(false);
+    await logout();
+    router.replace('/(tabs)/user');
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.headerTop}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <IconSymbol name="chevron.left" size={24} color="#000000" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Cài đặt</Text>
+        <Text style={styles.headerTitle}>Cài đặt hệ thống</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -47,7 +55,13 @@ export default function SettingsScreen() {
               <IconSymbol name="chevron.right" size={20} color="#c4c7c7" />
             </TouchableOpacity>
             <View style={styles.divider} />
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => setInfoModal({
+                title: 'Đổi mật khẩu',
+                content: 'Để bảo vệ an toàn cho tài khoản, mật khẩu có thể được đổi trực tiếp tại trang Chỉnh sửa hồ sơ hoặc liên hệ quản trị viên hệ thống để cấp lại mã xác thực.'
+              })}
+            >
               <Text style={styles.menuText}>Đổi mật khẩu</Text>
               <IconSymbol name="chevron.right" size={20} color="#c4c7c7" />
             </TouchableOpacity>
@@ -79,7 +93,7 @@ export default function SettingsScreen() {
           <Text style={styles.sectionTitle}>Bảo mật</Text>
           <View style={styles.card}>
             <View style={styles.menuItem}>
-              <Text style={styles.menuText}>Đăng nhập bằng Face ID</Text>
+              <Text style={styles.menuText}>Đăng nhập bằng Face ID / Sinh trắc</Text>
               <Switch 
                 value={faceId} 
                 onValueChange={setFaceId}
@@ -89,19 +103,37 @@ export default function SettingsScreen() {
             </View>
           </View>
 
-          <Text style={styles.sectionTitle}>Khác</Text>
+          <Text style={styles.sectionTitle}>Hỗ trợ & Pháp lý</Text>
           <View style={styles.card}>
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => setInfoModal({
+                title: 'Điều khoản dịch vụ',
+                content: '1. Khách hàng được cam kết bảo hành sản phẩm chính hãng trong 6 tháng.\n2. Miễn phí đổi trả trong 7 ngày nếu không vừa kích cỡ hoặc có lỗi kỹ thuật.\n3. Đơn hàng từ 300.000đ được hỗ trợ phí vận chuyển toàn quốc.'
+              })}
+            >
               <Text style={styles.menuText}>Điều khoản dịch vụ</Text>
               <IconSymbol name="chevron.right" size={20} color="#c4c7c7" />
             </TouchableOpacity>
             <View style={styles.divider} />
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => setInfoModal({
+                title: 'Chính sách bảo mật',
+                content: 'Thời Trang HD cam kết bảo mật 100% thông tin cá nhân, số điện thoại và địa chỉ giao hàng của quý khách. Mọi dữ liệu giao dịch trực tuyến đều được mã hóa theo chuẩn an toàn quốc tế.'
+              })}
+            >
               <Text style={styles.menuText}>Chính sách bảo mật</Text>
               <IconSymbol name="chevron.right" size={20} color="#c4c7c7" />
             </TouchableOpacity>
             <View style={styles.divider} />
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => setInfoModal({
+                title: 'Trung tâm Hỗ trợ & CSKH',
+                content: '• Hotline miễn cước: 1900 6868 (8:00 - 22:00 hàng ngày)\n• Email hỗ trợ: cskh@thoitranghd.com\n• Zalo CSKH: 0912 345 678\n• Địa chỉ trụ sở: Hà Nội & TP. Hồ Chí Minh.'
+              })}
+            >
               <Text style={styles.menuText}>Trợ giúp & Hỗ trợ</Text>
               <IconSymbol name="chevron.right" size={20} color="#c4c7c7" />
             </TouchableOpacity>
@@ -113,15 +145,20 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           ) : null}
 
-          <TouchableOpacity style={styles.deleteAccountButton}>
-            <Text style={styles.deleteAccountText}>Xóa tài khoản</Text>
-          </TouchableOpacity>
+          {user ? (
+            <TouchableOpacity 
+              style={styles.deleteAccountButton}
+              onPress={() => setShowDeleteModal(true)}
+            >
+              <Text style={styles.deleteAccountText}>Yêu cầu xóa tài khoản</Text>
+            </TouchableOpacity>
+          ) : null}
           
           <View style={{ height: 60 }} />
         </View>
       </ScrollView>
 
-      {/* Custom Professional Confirmation Modal */}
+      {/* Logout Confirmation Modal */}
       <ConfirmModal
         visible={showLogoutModal}
         title="Đăng xuất tài khoản"
@@ -133,6 +170,51 @@ export default function SettingsScreen() {
         onCancel={() => setShowLogoutModal(false)}
         onConfirm={confirmLogout}
       />
+
+      {/* Delete Account Confirmation Modal */}
+      <ConfirmModal
+        visible={showDeleteModal}
+        title="Xóa tài khoản vĩnh viễn"
+        message="Cảnh báo: Toàn bộ lịch sử mua hàng, điểm tích lũy và voucher của bạn sẽ bị hủy bỏ và không thể khôi phục."
+        confirmText="Xác nhận xóa"
+        cancelText="Hủy"
+        confirmType="danger"
+        onCancel={() => setShowDeleteModal(false)}
+        onConfirm={confirmDeleteAccount}
+      />
+
+      {/* Info Modal for Terms, Privacy, Support */}
+      <Modal
+        visible={!!infoModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setInfoModal(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity 
+            style={StyleSheet.absoluteFillObject} 
+            activeOpacity={1} 
+            onPress={() => setInfoModal(null)} 
+          />
+          <View style={styles.infoModalCard}>
+            <View style={styles.infoModalHeader}>
+              <Text style={styles.infoModalTitle}>{infoModal?.title}</Text>
+              <TouchableOpacity onPress={() => setInfoModal(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <IconSymbol name="xmark" size={20} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ maxHeight: 300, marginVertical: 12 }}>
+              <Text style={styles.infoModalContent}>{infoModal?.content}</Text>
+            </ScrollView>
+            <TouchableOpacity 
+              style={styles.infoModalCloseBtn}
+              onPress={() => setInfoModal(null)}
+            >
+              <Text style={styles.infoModalCloseText}>Đóng</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -229,5 +311,54 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: '#9ca3af',
-  }
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  infoModalCard: {
+    width: '100%',
+    maxWidth: 480,
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 5,
+  },
+  infoModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    paddingBottom: 12,
+  },
+  infoModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  infoModalContent: {
+    fontSize: 14,
+    color: '#334155',
+    lineHeight: 22,
+  },
+  infoModalCloseBtn: {
+    backgroundColor: '#0f172a',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  infoModalCloseText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
 });
