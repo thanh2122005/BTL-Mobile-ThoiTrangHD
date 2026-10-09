@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   StyleSheet,
   View,
@@ -123,6 +123,45 @@ export default function OrderDetailsScreen() {
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [returnNote, setReturnNote] = useState('');
   const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
+  const [returnProductVariants, setReturnProductVariants] = useState<any[]>([]);
+  const [isLoadingVariants, setIsLoadingVariants] = useState(false);
+
+  // Danh sách size động được đồng bộ từ biến thể thực tế của sản phẩm
+  const availableSizes = useMemo<string[]>(() => {
+    if (returnProductVariants && returnProductVariants.length > 0) {
+      const sizes: string[] = [];
+      returnProductVariants.forEach((v) => {
+        const sz = String(v.size || '').trim();
+        if (sz && !sizes.includes(sz)) {
+          sizes.push(sz);
+        }
+      });
+      if (sizes.length > 0) return sizes;
+    }
+    const curSize = returnItem?.size || '';
+    if (/^\d+$/.test(curSize)) {
+      return ['38', '39', '40', '41', '42', '43'];
+    }
+    return ['S', 'M', 'L', 'XL', '2XL', '3XL'];
+  }, [returnProductVariants, returnItem]);
+
+  // Danh sách màu sắc động được đồng bộ từ biến thể thực tế của sản phẩm
+  const availableColors = useMemo<{ name: string; hex: string }[]>(() => {
+    if (returnProductVariants && returnProductVariants.length > 0) {
+      const map = new Map<string, string>();
+      returnProductVariants.forEach((v) => {
+        const name = String(v.color || '').trim();
+        const hex = v.color_code || '#1A237E';
+        if (name && !map.has(name)) {
+          map.set(name, hex);
+        }
+      });
+      if (map.size > 0) {
+        return Array.from(map.entries()).map(([name, hex]) => ({ name, hex }));
+      }
+    }
+    return AVAILABLE_RETURN_COLORS;
+  }, [returnProductVariants]);
 
   const handlePickReturnImage = async () => {
     if (returnImages.length >= 3) {
@@ -182,8 +221,34 @@ export default function OrderDetailsScreen() {
     const it = item || (items.length > 0 ? items[0] : null);
     setReturnItem(it);
     setReturnReason('size');
-    setTargetSize(it?.size === 'M' ? 'L' : 'M');
+    setReturnImages([]);
     setReturnNote('');
+    setReturnProductVariants([]);
+
+    if (it?.product_id) {
+      setIsLoadingVariants(true);
+      fetch(`${API_URL}/api/products/${it.product_id}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (data && data.success && data.data?.variants && Array.isArray(data.data.variants)) {
+            setReturnProductVariants(data.data.variants);
+            const distinctSizes = [...new Set(data.data.variants.map((v: any) => String(v.size)))];
+            const otherSize = distinctSizes.find((s) => s !== it.size) || distinctSizes[0] || 'L';
+            setTargetSize(String(otherSize));
+
+            const distinctColors = [...new Set(data.data.variants.map((v: any) => String(v.color)))];
+            const otherColor = distinctColors.find((c) => c !== it.color) || distinctColors[0] || 'Xanh Navy';
+            setTargetColor(String(otherColor));
+          }
+        })
+        .catch((err) => {
+          console.error('Lỗi tải variants sản phẩm cho đổi trả:', err);
+        })
+        .finally(() => {
+          setIsLoadingVariants(false);
+        });
+    }
+
     setShowReturnModal(true);
   };
 
@@ -963,80 +1028,92 @@ export default function OrderDetailsScreen() {
                 })}
               </View>
 
-              {/* Target Size selector with 2 distinct rows: Chữ & Số */}
+              {/* Target Size selector synchronized with specific product variants */}
               {returnReason === 'size' && (
                 <View style={{ marginBottom: 16 }}>
-                  <Text style={styles.formGroupLabel}>CHỌN SIZE BẠN MUỐN ĐỔI SANG:</Text>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <Text style={styles.formGroupLabel}>CHỌN SIZE BẠN MUỐN ĐỔI SANG:</Text>
+                    <Text style={{ fontSize: 11, color: '#6b7280' }}>
+                      Size hiện có của sản phẩm
+                    </Text>
+                  </View>
                   
-                  {/* Row 1: Size Chữ */}
-                  <View style={styles.sizeCategoryBox}>
-                    <Text style={styles.sizeCategoryLabel}>👕 Size Chữ (Áo sơ mi, Vest, Polo, Áo thun):</Text>
+                  {isLoadingVariants ? (
+                    <View style={{ paddingVertical: 12, alignItems: 'center' }}>
+                      <ActivityIndicator size="small" color="#111827" />
+                      <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Đang tải danh sách size...</Text>
+                    </View>
+                  ) : (
                     <View style={styles.sizeRowContainer}>
-                      {['S', 'M', 'L', 'XL', '2XL', '3XL'].map((sz) => {
+                      {availableSizes.map((sz) => {
                         const isSel = targetSize === sz;
+                        const isCurrent = returnItem?.size === sz;
                         return (
                           <TouchableOpacity
                             key={sz}
-                            style={[styles.sizeOptionChip, isSel && styles.sizeOptionChipActive]}
+                            style={[
+                              styles.sizeOptionChip,
+                              isSel && styles.sizeOptionChipActive,
+                            ]}
                             onPress={() => setTargetSize(sz)}
+                            activeOpacity={0.8}
                           >
                             <Text style={[styles.sizeOptionChipText, isSel && styles.sizeOptionChipTextActive]}>
                               {sz}
                             </Text>
+                            {isCurrent && (
+                              <Text style={styles.currentBadgeText}>(Đang mua)</Text>
+                            )}
                           </TouchableOpacity>
                         );
                       })}
                     </View>
-                  </View>
-
-                  {/* Row 2: Size Số */}
-                  <View style={[styles.sizeCategoryBox, { marginTop: 10 }]}>
-                    <Text style={styles.sizeCategoryLabel}>👞 Size Số (Quần âu, Quần Jean, Giày dép):</Text>
-                    <View style={styles.sizeRowContainer}>
-                      {['38', '39', '40', '41', '42', '43'].map((sz) => {
-                        const isSel = targetSize === sz;
-                        return (
-                          <TouchableOpacity
-                            key={sz}
-                            style={[styles.sizeOptionChip, isSel && styles.sizeOptionChipActive]}
-                            onPress={() => setTargetSize(sz)}
-                          >
-                            <Text style={[styles.sizeOptionChipText, isSel && styles.sizeOptionChipTextActive]}>
-                              {sz}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  </View>
+                  )}
                 </View>
               )}
 
-              {/* Target Color selector when reason is color */}
+              {/* Target Color selector synchronized with specific product variants */}
               {returnReason === 'color' && (
                 <View style={{ marginBottom: 16 }}>
-                  <Text style={styles.formGroupLabel}>CHỌN MÀU SẮC BẠN MUỐN ĐỔI SANG:</Text>
-                  <View style={styles.colorGridContainer}>
-                    {AVAILABLE_RETURN_COLORS.map((c) => {
-                      const isSel = targetColor === c.name;
-                      return (
-                        <TouchableOpacity
-                          key={c.name}
-                          style={[styles.colorOptionChip, isSel && styles.colorOptionChipActive]}
-                          onPress={() => setTargetColor(c.name)}
-                          activeOpacity={0.8}
-                        >
-                          <View style={[styles.colorSwatchDot, { backgroundColor: c.hex }]} />
-                          <Text style={[styles.colorOptionChipText, isSel && styles.colorOptionChipTextActive]}>
-                            {c.name}
-                          </Text>
-                          {isSel && (
-                            <IconSymbol name="checkmark" size={14} color="#b45309" />
-                          )}
-                        </TouchableOpacity>
-                      );
-                    })}
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <Text style={styles.formGroupLabel}>CHỌN MÀU SẮC BẠN MUỐN ĐỔI SANG:</Text>
+                    <Text style={{ fontSize: 11, color: '#6b7280' }}>
+                      Bảng màu của sản phẩm
+                    </Text>
                   </View>
+                  
+                  {isLoadingVariants ? (
+                    <View style={{ paddingVertical: 12, alignItems: 'center' }}>
+                      <ActivityIndicator size="small" color="#111827" />
+                      <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Đang tải bảng màu...</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.colorGridContainer}>
+                      {availableColors.map((c) => {
+                        const isSel = targetColor === c.name;
+                        const isCurrent = returnItem?.color === c.name || returnItem?.color === c.hex;
+                        return (
+                          <TouchableOpacity
+                            key={c.name}
+                            style={[styles.colorOptionChip, isSel && styles.colorOptionChipActive]}
+                            onPress={() => setTargetColor(c.name)}
+                            activeOpacity={0.8}
+                          >
+                            <View style={[styles.colorSwatchDot, { backgroundColor: c.hex }]} />
+                            <Text style={[styles.colorOptionChipText, isSel && styles.colorOptionChipTextActive]}>
+                              {c.name}
+                            </Text>
+                            {isCurrent && (
+                              <Text style={styles.currentBadgeText}>(Đang mua)</Text>
+                            )}
+                            {isSel && !isCurrent && (
+                              <IconSymbol name="checkmark" size={14} color="#b45309" />
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )}
                 </View>
               )}
 
@@ -2276,6 +2353,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#334155',
+  },
+  currentBadgeText: {
+    fontSize: 10,
+    color: '#6b7280',
+    marginLeft: 4,
   },
   sizeOptionChipTextActive: {
     color: '#ffffff',
