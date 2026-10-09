@@ -1891,11 +1891,12 @@ app.post('/api/orders/:id/return', async (req, res) => {
 
     const order = orders[0];
 
-    // 1. Chỉ đơn hàng Completed mới được yêu cầu đổi trả
-    if (order.status !== 'Completed') {
+    // 1. Cho phép yêu cầu đổi trả khi đơn hàng đã hoàn tất hoặc đang giao nhận (Completed, Processing, Shipping)
+    const normalizedStatus = (order.status || '').toLowerCase();
+    if (!['completed', 'processing', 'shipping'].includes(normalizedStatus)) {
       return res.status(400).json({
         success: false,
-        message: 'Chỉ có thể yêu cầu đổi trả đối với đơn hàng đã được giao thành công (Hoàn thành).'
+        message: 'Chỉ có thể yêu cầu đổi trả đối với đơn hàng đang giao hoặc đã nhận hàng.'
       });
     }
 
@@ -1931,7 +1932,7 @@ app.post('/api/orders/:id/return', async (req, res) => {
     }
 
     await pool.query(
-      "UPDATE orders SET return_reason = ?, return_target_size = ?, return_note = ?, return_status = 'Requested' WHERE id = ?",
+      "UPDATE orders SET return_reason = ?, return_target_size = ?, return_note = ?, return_status = 'Requested', status = 'Completed' WHERE id = ?",
       [reason || 'Yêu cầu đổi trả', targetSize || null, note || null, orderId]
     );
 

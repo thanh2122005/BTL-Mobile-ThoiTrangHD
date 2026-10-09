@@ -50,6 +50,10 @@ interface OrderDetail {
   order_note?: string;
   cancel_reason?: string;
   shipping_fee?: number;
+  return_status?: 'Requested' | 'Approved' | 'Rejected' | null;
+  return_reason?: string | null;
+  return_note?: string | null;
+  return_target_size?: string | null;
   items: OrderItem[];
 }
 
@@ -92,7 +96,9 @@ export default function OrderDetailsScreen() {
       ? 'Đổi sang màu khác'
       : returnReason === 'defect'
       ? 'Lỗi sản xuất (Bung chỉ/hỏng khóa)'
-      : 'Giao sai mẫu/size';
+      : returnReason === 'wrong'
+      ? 'Giao sai mẫu / size so với đơn'
+      : 'Trả hàng & hoàn tiền (Không ưng ý/lỗi)';
 
     try {
       const res = await fetch(`${API_URL}/api/orders/${order.id}/return`, {
@@ -304,6 +310,14 @@ export default function OrderDetailsScreen() {
   const discountAmount = Math.max(0, subtotal - totalPrice);
 
   const status = (order?.status || 'Pending').toLowerCase();
+
+  // Shopee Mall / ThoiTrangHD 7-Day Free Return Policy
+  const orderDate = order ? new Date(order.created_at) : new Date();
+  const diffDays = Math.floor((Date.now() - orderDate.getTime()) / (1000 * 60 * 60 * 24));
+  const returnDaysRemaining = Math.max(0, 7 - diffDays);
+  const isReturnWindowValid = diffDays <= 7;
+  const expiryDate = new Date(orderDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const expiryDateStr = `${expiryDate.getDate().toString().padStart(2, '0')}/${(expiryDate.getMonth() + 1).toString().padStart(2, '0')}/${expiryDate.getFullYear()}`;
   const isStep1Active = true;
   const isStep2Active = ['processing', 'shipping', 'completed'].includes(status);
   const isStep3Active = ['shipping', 'completed'].includes(status);
@@ -476,6 +490,65 @@ export default function OrderDetailsScreen() {
                 </View>
               ) : null}
 
+                            {/* Shopee Mall / ThoiTrangHD Guarantee & 7-Day Return Policy Banner */}
+              {['processing', 'shipping', 'completed'].includes(status) && (
+                <View style={styles.policyCard}>
+                  <View style={styles.policyHeader}>
+                    <View style={styles.policyIconCircle}>
+                      <IconSymbol name="shield.checkmark" size={20} color="#111827" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, marginBottom: 4 }}>
+                        <Text style={styles.policyTitle}>Chính sách Shopee / ThoiTrangHD Mall</Text>
+                        {order.return_status ? (
+                          <View style={[
+                            styles.policyBadge,
+                            order.return_status === 'Approved' ? styles.badgeSuccess : order.return_status === 'Rejected' ? styles.badgeDanger : styles.badgeWarning
+                          ]}>
+                            <Text style={[
+                              styles.policyBadgeText,
+                              order.return_status === 'Approved' ? styles.badgeSuccessText : order.return_status === 'Rejected' ? styles.badgeDangerText : styles.badgeWarningText
+                            ]}>
+                              {order.return_status === 'Requested' ? '⏳ Đang xử lý đổi trả' : order.return_status === 'Approved' ? '✅ Đã duyệt đổi trả' : '❌ Từ chối đổi trả'}
+                            </Text>
+                          </View>
+                        ) : isReturnWindowValid ? (
+                          <View style={[styles.policyBadge, styles.badgeActive]}>
+                            <Text style={styles.policyBadgeActiveText}>Còn {returnDaysRemaining} ngày đổi trả miễn phí</Text>
+                          </View>
+                        ) : (
+                          <View style={[styles.policyBadge, styles.badgeExpired]}>
+                            <Text style={styles.policyBadgeExpiredText}>Hết hạn đổi trả (Quá 7 ngày)</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.policyDesc}>
+                        {isReturnWindowValid 
+                          ? `Miễn phí đổi trả trong 7 ngày (hạn đến ${expiryDateStr}). Bạn không bắt buộc phải bấm nhận ngay, có thể dùng thử đồ. Sau 7 ngày đơn sẽ tự động hoàn tất và đóng quyền khiếu nại đổi trả.`
+                          : 'Đơn hàng đã qua thời hạn 7 ngày thử đồ và đổi trả miễn phí theo chính sách sàn.'
+                        }
+                      </Text>
+                    </View>
+                  </View>
+
+                  {order.return_status && (
+                    <View style={styles.returnStatusDetailBox}>
+                      <Text style={styles.returnStatusDetailTitle}>📦 Thông tin yêu cầu đổi trả bảo hành:</Text>
+                      <Text style={styles.returnStatusDetailText}>• Lý do: {order.return_reason || 'Đổi trả hàng'}</Text>
+                      {order.return_target_size ? <Text style={styles.returnStatusDetailText}>• Đổi sang size: {order.return_target_size}</Text> : null}
+                      {order.return_note ? <Text style={styles.returnStatusDetailText}>• Ghi chú khách gửi: {order.return_note}</Text> : null}
+                      <Text style={styles.returnStatusDetailNotice}>
+                        {order.return_status === 'Requested' 
+                          ? '⏳ CSKH ThoiTrangHD đang liên hệ điều phối shipper thu hồi & giao đổi tận nhà cho bạn trong 24h.' 
+                          : order.return_status === 'Approved' 
+                          ? '✅ Yêu cầu đổi trả đã được chấp thuận! Shipper đang trên đường đến giao đổi sản phẩm.' 
+                          : '❌ Yêu cầu không được phê duyệt. Vui lòng liên hệ hotline 0912.345.678 để được giải đáp.'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
+
               {/* Items */}
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Sản phẩm ({items.length})</Text>
@@ -493,10 +566,10 @@ export default function OrderDetailsScreen() {
                             <Text style={styles.itemPrice}>{formatVND(item.price)}</Text>
                             <Text style={styles.itemQty}>x{item.quantity}</Text>
                           </View>
-                          {(order.status?.toLowerCase() === 'completed') && (
+                          {['completed', 'processing', 'shipping'].includes(status) && (
                             <View style={styles.itemActionRow}>
-                              {reviewedProductIds.includes(String(item.product_id)) ? (
-                                <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                              {status === 'completed' && (
+                                reviewedProductIds.includes(String(item.product_id)) ? (
                                   <TouchableOpacity
                                     style={[styles.itemReviewBtn, { borderColor: '#b78103', backgroundColor: '#fffbeb' }]}
                                     onPress={() => handleOpenReviewModal(item, true)}
@@ -504,16 +577,7 @@ export default function OrderDetailsScreen() {
                                     <IconSymbol name="pencil" size={12} color="#b78103" />
                                     <Text style={[styles.itemReviewBtnText, { color: '#b78103' }]}>Sửa đánh giá</Text>
                                   </TouchableOpacity>
-                                  <TouchableOpacity
-                                    style={styles.itemReturnBtn}
-                                    onPress={() => handleOpenReturnModal(item)}
-                                  >
-                                    <IconSymbol name="tag" size={12} color="#b78103" />
-                                    <Text style={styles.itemReturnBtnText}>Đổi trả</Text>
-                                  </TouchableOpacity>
-                                </View>
-                              ) : (
-                                <>
+                                ) : (
                                   <TouchableOpacity
                                     style={styles.itemReviewBtn}
                                     onPress={() => handleOpenReviewModal(item)}
@@ -521,14 +585,17 @@ export default function OrderDetailsScreen() {
                                     <IconSymbol name="star.fill" size={12} color="#ffffff" />
                                     <Text style={styles.itemReviewBtnText}>Đánh giá</Text>
                                   </TouchableOpacity>
-                                  <TouchableOpacity
-                                    style={styles.itemReturnBtn}
-                                    onPress={() => handleOpenReturnModal(item)}
-                                  >
-                                    <IconSymbol name="tag" size={12} color="#b78103" />
-                                    <Text style={styles.itemReturnBtnText}>Đổi trả</Text>
-                                  </TouchableOpacity>
-                                </>
+                                )
+                              )}
+
+                              {isReturnWindowValid && (!order.return_status || order.return_status === 'Rejected') && (
+                                <TouchableOpacity
+                                  style={styles.itemReturnBtn}
+                                  onPress={() => handleOpenReturnModal(item)}
+                                >
+                                  <IconSymbol name="arrow.2.squarepath" size={12} color="#111827" />
+                                  <Text style={styles.itemReturnBtnText}>Đổi size / Đổi trả</Text>
+                                </TouchableOpacity>
                               )}
                             </View>
                           )}
@@ -589,39 +656,86 @@ export default function OrderDetailsScreen() {
                   </View>
                 </View>
 
-                {order.status?.toLowerCase() === 'processing' && (
+                <View style={styles.actionButtonsStack}>
+                  {/* 1. NÚT ĐÃ NHẬN ĐƯỢC HÀNG (Hiển thị khi đang giao hàng) */}
+                  {['processing', 'shipping'].includes(status) && (!order.return_status || order.return_status === 'Rejected') && (
+                    <TouchableOpacity 
+                      style={styles.confirmReceiptBtn}
+                      onPress={() => setShowConfirmReceiptModal(true)}
+                      activeOpacity={0.85}
+                    >
+                      <IconSymbol name="checkmark.seal" size={18} color="#ffffff" />
+                      <Text style={styles.confirmReceiptBtnText}>ĐÃ NHẬN ĐƯỢC HÀNG</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {/* 2. NÚT YÊU CẦU ĐỔI TRẢ HÀNG (Hiển thị khi đang giao hoặc đã nhận trong 7 ngày) */}
+                  {['processing', 'shipping', 'completed'].includes(status) && (
+                    order.return_status ? (
+                      <TouchableOpacity 
+                        style={[
+                          styles.returnStatusBtn,
+                          order.return_status === 'Approved' ? styles.returnStatusBtnApproved : order.return_status === 'Rejected' ? styles.returnStatusBtnRejected : styles.returnStatusBtnRequested
+                        ]}
+                        onPress={() => handleOpenReturnModal(items[0])}
+                        activeOpacity={0.85}
+                      >
+                        <IconSymbol 
+                          name="arrow.2.squarepath" 
+                          size={16} 
+                          color={order.return_status === 'Approved' ? '#15803d' : order.return_status === 'Rejected' ? '#b91c1c' : '#b45309'} 
+                        />
+                        <Text style={[
+                          styles.returnStatusBtnText,
+                          { color: order.return_status === 'Approved' ? '#15803d' : order.return_status === 'Rejected' ? '#b91c1c' : '#b45309' }
+                        ]}>
+                          {order.return_status === 'Requested' ? 'ĐANG XỬ LÝ ĐỔI TRẢ (Xem lại)' : order.return_status === 'Approved' ? 'ĐÃ DUYỆT ĐỔI TRẢ' : 'TỪ CHỐI ĐỔI TRẢ'}
+                        </Text>
+                      </TouchableOpacity>
+                    ) : isReturnWindowValid ? (
+                      <TouchableOpacity 
+                        style={styles.requestReturnBtn}
+                        onPress={() => handleOpenReturnModal(items[0])}
+                        activeOpacity={0.85}
+                      >
+                        <IconSymbol name="arrow.2.squarepath" size={16} color="#111827" />
+                        <Text style={styles.requestReturnBtnText}>YÊU CẦU ĐỔI TRẢ HÀNG</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <View style={styles.expiredReturnBadge}>
+                        <Text style={styles.expiredReturnText}>⏱️ Hết hạn đổi trả (Quá 7 ngày)</Text>
+                      </View>
+                    )
+                  )}
+
+                  {/* 3. NÚT HỦY ĐƠN HÀNG (khi Pending) */}
+                  {status === 'pending' && (
+                    <TouchableOpacity 
+                      style={styles.cancelOrderBtn}
+                      onPress={() => setShowCancelModal(true)}
+                    >
+                      <Text style={styles.cancelOrderBtnText}>HỦY ĐƠN HÀNG NÀY</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {/* 4. NÚT TIẾP TỤC MUA SẮM */}
                   <TouchableOpacity 
-                    style={styles.confirmReceiptBtn}
-                    onPress={() => setShowConfirmReceiptModal(true)}
+                    style={styles.reviewBtn}
+                    onPress={() => router.push('/products')}
                     activeOpacity={0.85}
                   >
-                    <IconSymbol name="checkmark.seal.fill" size={18} color="#ffffff" />
-                    <Text style={styles.confirmReceiptBtnText}>ĐÃ NHẬN ĐƯỢC HÀNG</Text>
+                    <Text style={styles.reviewBtnText}>TIẾP TỤC MUA SẮM</Text>
                   </TouchableOpacity>
-                )}
-
-                {order.status?.toLowerCase() === 'pending' && (
+                  
+                  {/* 5. NÚT QUAY LẠI ĐƠN HÀNG */}
                   <TouchableOpacity 
-                    style={styles.cancelOrderBtn}
-                    onPress={() => setShowCancelModal(true)}
+                    style={styles.reorderBtn}
+                    onPress={() => router.push('/orders')}
+                    activeOpacity={0.85}
                   >
-                    <Text style={styles.cancelOrderBtnText}>HỦY ĐƠN HÀNG NÀY</Text>
+                    <Text style={styles.reorderBtnText}>QUAY LẠI ĐƠN HÀNG</Text>
                   </TouchableOpacity>
-                )}
-
-                <TouchableOpacity 
-                  style={styles.reviewBtn}
-                  onPress={() => router.push('/products')}
-                >
-                  <Text style={styles.reviewBtnText}>TIẾP TỤC MUA SẮM</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={styles.reorderBtn}
-                  onPress={() => router.push('/orders')}
-                >
-                  <Text style={styles.reorderBtnText}>QUAY LẠI ĐƠN HÀNG</Text>
-                </TouchableOpacity>
+                </View>
                 
               </View>
             </View>
@@ -636,7 +750,7 @@ export default function OrderDetailsScreen() {
       <ConfirmModal
         visible={showConfirmReceiptModal}
         title="Xác nhận nhận hàng"
-        message="Bạn xác nhận đã nhận được gói hàng đầy đủ và muốn hoàn tất đơn hàng này?"
+        message="Bạn xác nhận đã nhận được gói hàng đầy đủ và muốn hoàn tất đơn hàng? Lưu ý: Bạn vẫn được bảo vệ quyền Đổi trả / Hoàn tiền miễn phí trong 7 ngày theo chính sách ThoiTrangHD Mall."
         confirmText="ĐÃ NHẬN ĐỦ HÀNG"
         cancelText="CHƯA NHẬN"
         onConfirm={handleConfirmReceipt}
@@ -708,6 +822,7 @@ export default function OrderDetailsScreen() {
                   { key: 'color', label: 'Muốn đổi sang màu sắc khác', icon: '🎨' },
                   { key: 'defect', label: 'Lỗi sản xuất (Bung chỉ, hỏng khóa kéo, lỗi vải)', icon: '🧵' },
                   { key: 'wrong', label: 'Shop giao sai mẫu / sai size so với đơn', icon: '📦' },
+                  { key: 'refund', label: 'Trả hàng & hoàn tiền (Không đúng mô tả / không ưng ý)', icon: '🔄' },
                 ].map((r) => {
                   const isActive = returnReason === r.key;
                   return (
@@ -1211,33 +1326,92 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#000000',
   },
+  /* Unified Right Action Button Stack */
+  actionButtonsStack: {
+    marginTop: 16,
+    gap: 10,
+  },
   confirmReceiptBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#15803d',
+    backgroundColor: '#111827',
     paddingVertical: 14,
-    borderRadius: 8,
+    borderRadius: 24,
     gap: 8,
-    marginTop: 8,
-    elevation: 2,
-    shadowColor: '#15803d',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.15,
     shadowRadius: 4,
+    elevation: 2,
   },
   confirmReceiptBtnText: {
     color: '#ffffff',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     letterSpacing: 0.5,
+  },
+  requestReturnBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1.5,
+    borderColor: '#111827',
+    paddingVertical: 14,
+    borderRadius: 24,
+    gap: 8,
+  },
+  requestReturnBtnText: {
+    color: '#111827',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  returnStatusBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 13,
+    paddingHorizontal: 12,
+    borderRadius: 24,
+    gap: 8,
+    borderWidth: 1,
+  },
+  returnStatusBtnRequested: {
+    backgroundColor: '#fffbeb',
+    borderColor: '#fde68a',
+  },
+  returnStatusBtnApproved: {
+    backgroundColor: '#f0fdf4',
+    borderColor: '#bbf7d0',
+  },
+  returnStatusBtnRejected: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fecaca',
+  },
+  returnStatusBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  expiredReturnBadge: {
+    backgroundColor: '#f3f4f6',
+    paddingVertical: 10,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  expiredReturnText: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '600',
   },
   cancelOrderBtn: {
     backgroundColor: '#fee2e2',
     paddingVertical: 14,
     borderRadius: 24,
     alignItems: 'center',
-    marginBottom: 12,
   },
   cancelOrderBtnText: {
     color: '#ba1a1a',
@@ -1246,31 +1420,152 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   reviewBtn: {
-    backgroundColor: '#000000',
-    paddingVertical: 16,
+    backgroundColor: '#f3f4f6',
+    paddingVertical: 14,
     borderRadius: 24,
     alignItems: 'center',
-    marginBottom: 12,
   },
   reviewBtnText: {
-    color: '#ffffff',
-    fontSize: 12,
+    color: '#1f2937',
+    fontSize: 13,
     fontWeight: '600',
-    letterSpacing: 1,
+    letterSpacing: 0.5,
   },
   reorderBtn: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: '#747878',
-    paddingVertical: 16,
+    borderColor: '#e5e7eb',
+    paddingVertical: 14,
     borderRadius: 24,
     alignItems: 'center',
   },
   reorderBtnText: {
-    color: '#000000',
-    fontSize: 12,
+    color: '#4b5563',
+    fontSize: 13,
     fontWeight: '600',
-    letterSpacing: 1,
+    letterSpacing: 0.5,
+  },
+
+  /* Shopee Mall / ThoiTrangHD Guarantee & 7-Day Return Policy Card */
+  policyCard: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  policyHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  policyIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  policyTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  policyBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  policyBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  badgeActive: {
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  policyBadgeActiveText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#1d4ed8',
+  },
+  badgeExpired: {
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  policyBadgeExpiredText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  badgeWarning: {
+    backgroundColor: '#fffbeb',
+    borderWidth: 1,
+    borderColor: '#fde68a',
+  },
+  badgeWarningText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#b45309',
+  },
+  badgeSuccess: {
+    backgroundColor: '#f0fdf4',
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+  },
+  badgeSuccessText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#15803d',
+  },
+  badgeDanger: {
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  badgeDangerText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#b91c1c',
+  },
+  policyDesc: {
+    fontSize: 12,
+    color: '#4b5563',
+    lineHeight: 18,
+    marginTop: 2,
+  },
+  returnStatusDetailBox: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+    gap: 4,
+  },
+  returnStatusDetailTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  returnStatusDetailText: {
+    fontSize: 12,
+    color: '#374151',
+  },
+  returnStatusDetailNotice: {
+    fontSize: 11,
+    color: '#6b7280',
+    fontStyle: 'italic',
+    marginTop: 4,
   },
   /* Item Review Button & Badge */
   itemActionRow: {
