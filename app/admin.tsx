@@ -1795,7 +1795,7 @@ export default function AdminScreen() {
                           <View style={[styles.returnDetailRow, { marginTop: 6 }]}>
                             <Text style={styles.returnDetailLabel}>📝 Ghi chú từ khách:</Text>
                             <Text style={[styles.returnDetailValue, { fontStyle: 'italic', color: '#475569' }]}>
-                              "{ticket.return_note}"
+                              &quot;{ticket.return_note}&quot;
                             </Text>
                           </View>
                         )}
@@ -2070,7 +2070,7 @@ export default function AdminScreen() {
                     <Text style={styles.cardTitle}>QUẢN LÝ NHẬP KHO & LÔ HÀNG (INBOUND QC)</Text>
                   </View>
                   <Text style={styles.cardSubtitle}>
-                    Tiêu chuẩn may mặc công nghiệp "100 cái như 100" • Giám sát phiếu nhập theo Lô SX (Batch No) & Kiểm định xuất xưởng
+                    Tiêu chuẩn may mặc công nghiệp &ldquo;100 cái như 100&rdquo; • Giám sát phiếu nhập theo Lô SX (Batch No) & Kiểm định xuất xưởng
                   </Text>
                 </View>
                 <TouchableOpacity
@@ -2407,7 +2407,7 @@ export default function AdminScreen() {
                     </Text>
                     {selectedOrder.return_note ? (
                       <Text style={{ fontSize: 12, color: '#92400e', marginTop: 2 }}>
-                        Ghi chú khách: "{selectedOrder.return_note}"
+                        Ghi chú khách: &quot;{selectedOrder.return_note}&quot;
                       </Text>
                     ) : null}
                     <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
@@ -2773,8 +2773,9 @@ export default function AdminScreen() {
                     </View>
 
                     {/* Matrix Grid Table */}
-                    <View style={styles.matrixTable}>
-                      {/* Table Header Row */}
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ minWidth: '100%' }}>
+                      <View style={[styles.matrixTable, { minWidth: 500 }]}>
+                        {/* Table Header Row */}
                       <View style={styles.matrixHeaderRow}>
                         <Text style={[styles.matrixCell, styles.matrixHeaderCell, { flex: 1.2 }]}>MÀU SẮC</Text>
                         {sizes.map((sz: any) => (
@@ -2859,6 +2860,7 @@ export default function AdminScreen() {
                         </View>
                       </View>
                     </View>
+                  </ScrollView>
 
                     <Text style={{ fontSize: 11, color: '#64748b', marginTop: 12, lineHeight: 16 }}>
                       💡 Khi khách hàng chọn Size và Màu trên ứng dụng, hệ thống tự động đối soát ma trận tồn kho này trong thời gian thực. Các size/màu hết hàng (0) sẽ tự động khóa nút đặt hàng.
@@ -3001,7 +3003,7 @@ export default function AdminScreen() {
                       <View style={styles.detailQcBanner}>
                         <IconSymbol name="checkmark.circle.fill" size={18} color="#15803d" />
                         <Text style={styles.detailQcBannerText}>
-                          ĐÃ NGHIỆM THU: ĐẠT CHUẨN XUẤT XƯỞNG CÔNG NGHIỆP ("100 CÁI NHƯ 100")
+                          ĐÃ NGHIỆM THU: ĐẠT CHUẨN XUẤT XƯỞNG CÔNG NGHIỆP (&ldquo;100 CÁI NHƯ 100&rdquo;)
                         </Text>
                       </View>
                       <View style={{ gap: 8, marginTop: 10 }}>
@@ -3288,7 +3290,7 @@ export default function AdminScreen() {
                     {importForm.qc_passed && <IconSymbol name="checkmark" size={12} color="#ffffff" />}
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.qcCheckTitle}>Đạt chuẩn dây chuyền công nghiệp ("100 cái như 100")</Text>
+                    <Text style={styles.qcCheckTitle}>Đạt chuẩn dây chuyền công nghiệp (&ldquo;100 cái như 100&rdquo;)</Text>
                     <Text style={styles.qcCheckDesc}>
                       Kiểm định 5-10% số lượng: Đường may kỹ càng, khóa kéo trơn tru, khuy bấm chắc chắn, vải chuẩn định lượng không bai xù.
                     </Text>

@@ -315,7 +315,7 @@ export default function HomeScreen() {
             {displayProducts.length === 0 ? (
               <View style={styles.emptyCategoryBox}>
                 <IconSymbol name="bag" size={44} color="#cbd5e1" />
-                <Text style={styles.emptyCategoryTitle}>Chưa có sản phẩm nào trong danh mục "{activeCategory}"</Text>
+                <Text style={styles.emptyCategoryTitle}>Chưa có sản phẩm nào trong danh mục &quot;{activeCategory}&quot;</Text>
                 <Text style={styles.emptyCategorySubtitle}>Cửa hàng sẽ sớm bổ sung các mẫu mới cho danh mục này.</Text>
                 <TouchableOpacity style={styles.returnAllBtn} onPress={() => setActiveCategory('Tất cả')}>
                   <Text style={styles.returnAllBtnText}>Quay lại xem gợi ý thịnh hành</Text>

@@ -1,4 +1,4 @@
-﻿import { VoucherModal } from '@/components/ui/VoucherModal';
+import { VoucherModal } from '@/components/ui/VoucherModal';
 import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
