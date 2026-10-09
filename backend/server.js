@@ -986,6 +986,44 @@ app.put('/api/orders/:identifier/cancel', async (req, res) => {
   }
 });
 
+
+// API 6.2: Giả lập thanh toán chuyển khoản (Sandbox Payment Webhook Simulator cho BTL/Demo)
+app.put('/api/orders/:identifier/simulate-bank-payment', async (req, res) => {
+  try {
+    const identifier = req.params.identifier;
+    let query = 'SELECT id, order_code, status, payment_method, total_price FROM orders WHERE id = ?';
+    if (isNaN(Number(identifier))) {
+      query = 'SELECT id, order_code, status, payment_method, total_price FROM orders WHERE order_code = ?';
+    }
+    const [orders] = await pool.query(query, [identifier]);
+    if (orders.length === 0) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng' });
+    }
+    const order = orders[0];
+    if (order.status !== 'Pending') {
+      return res.json({
+        success: true,
+        message: 'Đơn hàng đã được thanh toán hoặc xác nhận trước đó!',
+        orderId: order.id,
+        orderCode: order.order_code,
+        status: order.status
+      });
+    }
+    await pool.query('UPDATE orders SET status = ? WHERE id = ?', ['Processing', order.id]);
+    console.log('[Payment-Simulator]: Đơn hàng #' + (order.order_code || order.id) + ' đã mô phỏng thanh toán VietQR thành công.');
+    res.json({
+      success: true,
+      message: 'Xác nhận thanh toán chuyển khoản thành công (Mô phỏng Sandbox)!',
+      orderId: order.id,
+      orderCode: order.order_code,
+      status: 'Processing'
+    });
+  } catch (err) {
+    console.error('Lỗi simulate-bank-payment:', err);
+    res.status(500).json({ success: false, message: 'Lỗi server khi mô phỏng thanh toán' });
+  }
+});
+
 // API 7: Đăng ký người dùng
 app.post('/api/auth/register', async (req, res) => {
   try {

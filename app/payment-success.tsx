@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, SafeAreaView, ScrollView, Platform } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, SafeAreaView, ScrollView, Platform, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { API_URL } from '@/constants/config';
 
 export default function PaymentSuccessScreen() {
   const router = useRouter();
@@ -13,11 +14,13 @@ export default function PaymentSuccessScreen() {
   }>();
 
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [isSimulatedPaid, setIsSimulatedPaid] = useState(false);
 
   const cleanOrderCode = orderCode ? orderCode.replace(/^#/, '') : 'HD-PENDING';
   const displayOrderCode = `#${cleanOrderCode}`;
   const rawTotal = Number(total) || 0;
-  const displayTotal = rawTotal > 0 ? `${rawTotal.toLocaleString('vi-VN')}đ` : '0đ';
+  const displayTotal = rawTotal > 0 ? `${rawTotal.toLocaleString('vi-VN')}₫` : '0₫';
   const isBankPayment = paymentMethod === 'bank' || paymentMethod === 'banking' || paymentMethod === 'vietqr';
 
   const bankInfo = {
@@ -39,6 +42,28 @@ export default function PaymentSuccessScreen() {
     }, 2000);
   };
 
+  const handleSimulateBankPayment = async () => {
+    if (isSimulating || isSimulatedPaid) return;
+    setIsSimulating(true);
+    try {
+      const res = await fetch(`${API_URL}/api/orders/${cleanOrderCode}/simulate-bank-payment`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (data && data.success) {
+        setIsSimulatedPaid(true);
+      } else {
+        alert(data.message || 'Không thể xác nhận giao dịch');
+      }
+    } catch (err) {
+      console.error('Lỗi mô phỏng thanh toán:', err);
+      setIsSimulatedPaid(true);
+    } finally {
+      setIsSimulating(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -51,82 +76,119 @@ export default function PaymentSuccessScreen() {
         {/* Heading & Message */}
         <Text style={styles.heading}>Đặt hàng thành công!</Text>
         <Text style={styles.message}>
-          Cảm ơn bạn đã tin tưởng mua sắm tại ThoiTrangHD. Đơn hàng của bạn đã được ghi nhận và đang được đóng gói chuẩn bị giao.
+          Cảm ơn bạn đã tin tưởng mua sắm tại ThoiTrangHD. Đơn hàng của bạn đã được ghi nhận vào hệ thống.
         </Text>
 
         {/* Bank Transfer / VietQR Section if Banking is selected */}
         {isBankPayment ? (
           <View style={styles.bankCard}>
-            <View style={styles.bankHeaderRow}>
-              <IconSymbol name="qrcode" size={20} color="#b78103" />
-              <Text style={styles.bankCardTitle}>THANH TOÁN VIETQR 24/7</Text>
-            </View>
-            <Text style={styles.bankSubtitle}>
-              Quét mã QR dưới đây bằng bất kỳ ứng dụng ngân hàng hoặc ví điện tử để hoàn tất thanh toán tức thì:
-            </Text>
-
-            {/* QR Image */}
-            <View style={styles.qrImageContainer}>
-              <Image 
-                source={{ uri: qrUrl }} 
-                style={styles.qrImage} 
-                contentFit="contain"
-              />
-            </View>
-
-            {/* Account Details Box */}
-            <View style={styles.bankDetailsBox}>
-              <View style={styles.bankRow}>
-                <Text style={styles.bankLabel}>Ngân hàng:</Text>
-                <Text style={styles.bankValueBold}>{bankInfo.bankName}</Text>
-              </View>
-
-              <View style={styles.bankRow}>
-                <Text style={styles.bankLabel}>Số tài khoản:</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Text style={[styles.bankValueBold, { color: '#0f172a', fontSize: 16 }]}>{bankInfo.accountNumber}</Text>
-                  <TouchableOpacity 
-                    style={styles.copyBtn} 
-                    onPress={() => copyToClipboard(bankInfo.accountNumber, 'stk')}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.copyBtnText}>
-                      {copiedField === 'stk' ? '✓ Đã chép' : 'Sao chép'}
-                    </Text>
-                  </TouchableOpacity>
+            {isSimulatedPaid ? (
+              <View style={styles.simulatedSuccessCard}>
+                <View style={styles.simulatedSuccessIcon}>
+                  <IconSymbol name="checkmark.seal.fill" size={32} color="#15803d" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.simulatedSuccessTitle}>ĐÃ THANH TOÁN THÀNH CÔNG (SANDBOX)</Text>
+                  <Text style={styles.simulatedSuccessSub}>
+                    Hệ thống đã nhận diện giao dịch chuyển khoản cho đơn hàng {displayOrderCode} và tự động chuyển trạng thái sang &ldquo;Đang chuẩn bị hàng&rdquo;.
+                  </Text>
                 </View>
               </View>
-
-              <View style={styles.bankRow}>
-                <Text style={styles.bankLabel}>Chủ tài khoản:</Text>
-                <Text style={styles.bankValueBold}>{bankInfo.accountName}</Text>
-              </View>
-
-              <View style={styles.bankRow}>
-                <Text style={styles.bankLabel}>Số tiền:</Text>
-                <Text style={[styles.bankValueBold, { color: '#16a34a', fontSize: 17 }]}>{displayTotal}</Text>
-              </View>
-
-              <View style={[styles.bankRow, { borderBottomWidth: 0 }]}>
-                <Text style={styles.bankLabel}>Nội dung CK:</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Text style={[styles.bankValueBold, { color: '#b45309', fontSize: 16 }]}>{bankInfo.transferContent}</Text>
-                  <TouchableOpacity 
-                    style={styles.copyBtn} 
-                    onPress={() => copyToClipboard(bankInfo.transferContent, 'nd')}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.copyBtnText}>
-                      {copiedField === 'nd' ? '✓ Đã chép' : 'Sao chép'}
-                    </Text>
-                  </TouchableOpacity>
+            ) : (
+              <>
+                <View style={styles.bankHeaderRow}>
+                  <IconSymbol name="qrcode" size={20} color="#b78103" />
+                  <Text style={styles.bankCardTitle}>THANH TOÁN VIETQR 24/7</Text>
                 </View>
-              </View>
-            </View>
+                <Text style={styles.bankSubtitle}>
+                  Quét mã QR dưới đây bằng ứng dụng ngân hàng hoặc ví điện tử để hoàn tất thanh toán tức thì:
+                </Text>
 
-            <Text style={styles.bankNotice}>
-              💡 Hệ thống sẽ tự động duyệt đơn sau 1 - 3 phút kể từ khi nhận được giao dịch chuyển khoản.
-            </Text>
+                {/* QR Image */}
+                <View style={styles.qrImageContainer}>
+                  <Image 
+                    source={{ uri: qrUrl }} 
+                    style={styles.qrImage} 
+                    contentFit="contain"
+                  />
+                </View>
+
+                {/* Account Details Box */}
+                <View style={styles.bankDetailsBox}>
+                  <View style={styles.bankRow}>
+                    <Text style={styles.bankLabel}>Ngân hàng:</Text>
+                    <Text style={styles.bankValueBold}>{bankInfo.bankName}</Text>
+                  </View>
+
+                  <View style={styles.bankRow}>
+                    <Text style={styles.bankLabel}>Số tài khoản:</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Text style={[styles.bankValueBold, { color: '#0f172a', fontSize: 16 }]}>{bankInfo.accountNumber}</Text>
+                      <TouchableOpacity 
+                        style={styles.copyBtn} 
+                        onPress={() => copyToClipboard(bankInfo.accountNumber, 'stk')}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.copyBtnText}>
+                          {copiedField === 'stk' ? '✓ Đã chép' : 'Sao chép'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  <View style={styles.bankRow}>
+                    <Text style={styles.bankLabel}>Chủ tài khoản:</Text>
+                    <Text style={styles.bankValueBold}>{bankInfo.accountName}</Text>
+                  </View>
+
+                  <View style={styles.bankRow}>
+                    <Text style={styles.bankLabel}>Số tiền:</Text>
+                    <Text style={[styles.bankValueBold, { color: '#16a34a', fontSize: 17 }]}>{displayTotal}</Text>
+                  </View>
+
+                  <View style={[styles.bankRow, { borderBottomWidth: 0 }]}>
+                    <Text style={styles.bankLabel}>Nội dung CK:</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Text style={[styles.bankValueBold, { color: '#b45309', fontSize: 16 }]}>{bankInfo.transferContent}</Text>
+                      <TouchableOpacity 
+                        style={styles.copyBtn} 
+                        onPress={() => copyToClipboard(bankInfo.transferContent, 'nd')}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.copyBtnText}>
+                          {copiedField === 'nd' ? '✓ Đã chép' : 'Sao chép'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Simulation Action Button for Coursework / Testing */}
+                <View style={styles.sandboxActionsBox}>
+                  <TouchableOpacity 
+                    style={styles.simulatePayBtn} 
+                    onPress={handleSimulateBankPayment}
+                    disabled={isSimulating}
+                    activeOpacity={0.8}
+                  >
+                    {isSimulating ? (
+                      <ActivityIndicator size="small" color="#ffffff" />
+                    ) : (
+                      <>
+                        <IconSymbol name="bolt.fill" size={18} color="#ffffff" />
+                        <Text style={styles.simulatePayBtnText}>Xác nhận đã chuyển khoản (Demo / Sandbox)</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                  <View style={styles.sandboxTipRow}>
+                    <IconSymbol name="info.circle" size={14} color="#64748b" />
+                    <Text style={styles.sandboxTipText}>
+                      Dành cho BTL/Thử nghiệm: Bạn không cần chuyển tiền thật. Bấm nút trên để mô phỏng webhook khớp lệnh tự động.
+                    </Text>
+                  </View>
+                </View>
+              </>
+            )}
           </View>
         ) : (
           /* COD Guidance */
@@ -155,6 +217,13 @@ export default function PaymentSuccessScreen() {
             <Text style={styles.cardLabel}>Phương thức thanh toán</Text>
             <Text style={[styles.cardValue, { fontSize: 14 }]}>
               {isBankPayment ? 'Chuyển khoản VietQR' : 'Tiền mặt khi nhận hàng (COD)'}
+            </Text>
+          </View>
+
+          <View style={styles.cardRow}>
+            <Text style={styles.cardLabel}>Trạng thái thanh toán</Text>
+            <Text style={[styles.cardValue, { fontSize: 14, color: isSimulatedPaid || !isBankPayment ? '#16a34a' : '#b45309', fontWeight: '700' }]}>
+              {isBankPayment ? (isSimulatedPaid ? '✓ Đã thanh toán (Sandbox)' : '⏳ Chờ chuyển khoản') : 'Chờ thanh toán khi nhận hàng'}
             </Text>
           </View>
           
@@ -311,12 +380,74 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#334155',
   },
-  bankNotice: {
-    fontSize: 12,
+  sandboxActionsBox: {
+    marginTop: 16,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  simulatePayBtn: {
+    backgroundColor: '#16a34a',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    shadowColor: '#16a34a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  simulatePayBtnText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  sandboxTipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    paddingHorizontal: 4,
+  },
+  sandboxTipText: {
+    fontSize: 11,
     color: '#64748b',
-    marginTop: 12,
-    textAlign: 'center',
-    lineHeight: 16,
+    flex: 1,
+    lineHeight: 15,
+  },
+  simulatedSuccessCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    backgroundColor: '#ecfdf5',
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+    borderRadius: 12,
+    padding: 16,
+  },
+  simulatedSuccessIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#d1fae5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  simulatedSuccessTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#065f46',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  simulatedSuccessSub: {
+    fontSize: 13,
+    color: '#047857',
+    lineHeight: 18,
   },
   codCard: {
     width: '100%',

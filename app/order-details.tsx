@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
+  Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -114,6 +115,7 @@ export default function OrderDetailsScreen() {
   const [showConfirmReceiptModal, setShowConfirmReceiptModal] = useState(false);
   const [isConfirmingReceipt, setIsConfirmingReceipt] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isSimulatingPayment, setIsSimulatingPayment] = useState(false);
 
   // Return / Warranty states
   const [showReturnModal, setShowReturnModal] = useState(false);
@@ -465,6 +467,29 @@ export default function OrderDetailsScreen() {
       showToast('Lỗi kết nối khi xác nhận nhận hàng');
     } finally {
       setIsConfirmingReceipt(false);
+    }
+  };
+
+  const handleSimulateBankPayment = async () => {
+    if (!order || isSimulatingPayment) return;
+    setIsSimulatingPayment(true);
+    try {
+      const res = await fetch(`${API_URL}/api/orders/${order.id}/simulate-bank-payment`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (data && data.success) {
+        setOrder(prev => prev ? { ...prev, status: 'Processing' } : null);
+        Alert.alert('Thành công', 'Đã ghi nhận thanh toán thành công (Mô phỏng Sandbox)! Đơn hàng chuyển sang trạng thái "Đang chuẩn bị hàng".');
+      } else {
+        Alert.alert('Thông báo', data.message || 'Không thể xác nhận thanh toán');
+      }
+    } catch (err) {
+      console.error('Lỗi simulate payment:', err);
+      Alert.alert('Lỗi', 'Không thể kết nối đến máy chủ để xác nhận thanh toán');
+    } finally {
+      setIsSimulatingPayment(false);
     }
   };
 
@@ -889,6 +914,38 @@ export default function OrderDetailsScreen() {
                       • Số tài khoản: <Text style={{ fontWeight: '700' }}>0988776655</Text>{'\n'}
                       • Chủ TK: <Text style={{ fontWeight: '700' }}>CÔNG TY THỜI TRANG HD</Text>{'\n'}
                       • Nội dung: <Text style={{ fontWeight: '700', color: '#b45309' }}>{order.order_code}</Text>
+                    </Text>
+
+                    {/* Simulation Action Button for Coursework / Testing */}
+                    <TouchableOpacity
+                      style={{
+                        backgroundColor: '#16a34a',
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 8,
+                        paddingVertical: 10,
+                        paddingHorizontal: 14,
+                        borderRadius: 8,
+                        marginTop: 10,
+                      }}
+                      onPress={handleSimulateBankPayment}
+                      disabled={isSimulatingPayment}
+                      activeOpacity={0.8}
+                    >
+                      {isSimulatingPayment ? (
+                        <ActivityIndicator size="small" color="#ffffff" />
+                      ) : (
+                        <>
+                          <IconSymbol name="bolt.fill" size={16} color="#ffffff" />
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: '#ffffff' }}>
+                            Xác nhận đã chuyển khoản (Demo / Sandbox)
+                          </Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                    <Text style={{ fontSize: 11, color: '#64748b', marginTop: 6, textAlign: 'center' }}>
+                      💡 Dành cho BTL: Nhấn nút trên để mô phỏng duyệt thanh toán mà không cần bank tiền thật.
                     </Text>
                   </View>
                 )}
