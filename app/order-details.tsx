@@ -490,7 +490,7 @@ export default function OrderDetailsScreen() {
                 </View>
               ) : null}
 
-                            {/* Shopee Mall / ThoiTrangHD Guarantee & 7-Day Return Policy Banner */}
+                            {/* ThoiTrangHD 7-Day Free Return Policy Banner */}
               {['processing', 'shipping', 'completed'].includes(status) && (
                 <View style={styles.policyCard}>
                   <View style={styles.policyHeader}>
@@ -499,7 +499,7 @@ export default function OrderDetailsScreen() {
                     </View>
                     <View style={{ flex: 1 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, marginBottom: 4 }}>
-                        <Text style={styles.policyTitle}>Chính sách Shopee / ThoiTrangHD Mall</Text>
+                        <Text style={styles.policyTitle}>Chính sách Đổi trả ThoiTrangHD</Text>
                         {order.return_status ? (
                           <View style={[
                             styles.policyBadge,
@@ -525,7 +525,7 @@ export default function OrderDetailsScreen() {
                       <Text style={styles.policyDesc}>
                         {isReturnWindowValid 
                           ? `Miễn phí đổi trả trong 7 ngày (hạn đến ${expiryDateStr}). Bạn không bắt buộc phải bấm nhận ngay, có thể dùng thử đồ. Sau 7 ngày đơn sẽ tự động hoàn tất và đóng quyền khiếu nại đổi trả.`
-                          : 'Đơn hàng đã qua thời hạn 7 ngày thử đồ và đổi trả miễn phí theo chính sách sàn.'
+                          : 'Đơn hàng đã qua thời hạn 7 ngày thử đồ và đổi trả miễn phí theo chính sách thương hiệu.'
                         }
                       </Text>
                     </View>
@@ -554,8 +554,8 @@ export default function OrderDetailsScreen() {
                 <Text style={styles.sectionTitle}>Sản phẩm ({items.length})</Text>
                 <View style={styles.itemsList}>
                   {items.map((item, index) => (
-                    <React.Fragment key={item.id || index}>
-                      <View style={styles.orderItem}>
+                    <View key={item.id || index} style={styles.orderItemCard}>
+                      <View style={styles.orderItemMain}>
                         <Image source={getImageSource(item.image)} style={styles.itemImage} contentFit="cover" />
                         <View style={styles.itemDetails}>
                           <Text style={styles.itemName} numberOfLines={2}>{item.product_name}</Text>
@@ -566,43 +566,47 @@ export default function OrderDetailsScreen() {
                             <Text style={styles.itemPrice}>{formatVND(item.price)}</Text>
                             <Text style={styles.itemQty}>x{item.quantity}</Text>
                           </View>
-                          {['completed', 'processing', 'shipping'].includes(status) && (
-                            <View style={styles.itemActionRow}>
-                              {status === 'completed' && (
-                                reviewedProductIds.includes(String(item.product_id)) ? (
-                                  <TouchableOpacity
-                                    style={[styles.itemReviewBtn, { borderColor: '#b78103', backgroundColor: '#fffbeb' }]}
-                                    onPress={() => handleOpenReviewModal(item, true)}
-                                  >
-                                    <IconSymbol name="pencil" size={12} color="#b78103" />
-                                    <Text style={[styles.itemReviewBtnText, { color: '#b78103' }]}>Sửa đánh giá</Text>
-                                  </TouchableOpacity>
-                                ) : (
-                                  <TouchableOpacity
-                                    style={styles.itemReviewBtn}
-                                    onPress={() => handleOpenReviewModal(item)}
-                                  >
-                                    <IconSymbol name="star.fill" size={12} color="#ffffff" />
-                                    <Text style={styles.itemReviewBtnText}>Đánh giá</Text>
-                                  </TouchableOpacity>
-                                )
-                              )}
-
-                              {isReturnWindowValid && (!order.return_status || order.return_status === 'Rejected') && (
-                                <TouchableOpacity
-                                  style={styles.itemReturnBtn}
-                                  onPress={() => handleOpenReturnModal(item)}
-                                >
-                                  <IconSymbol name="arrow.2.squarepath" size={12} color="#111827" />
-                                  <Text style={styles.itemReturnBtnText}>Đổi size / Đổi trả</Text>
-                                </TouchableOpacity>
-                              )}
-                            </View>
-                          )}
                         </View>
                       </View>
-                      {index < items.length - 1 && <View style={styles.itemDivider} />}
-                    </React.Fragment>
+
+                      {/* Prominent Action Buttons for this Product Item */}
+                      {['completed', 'processing', 'shipping'].includes(status) && (
+                        <View style={styles.itemBottomActions}>
+                          {status === 'completed' && (
+                            reviewedProductIds.includes(String(item.product_id)) ? (
+                              <TouchableOpacity
+                                style={styles.itemEditReviewBtn}
+                                onPress={() => handleOpenReviewModal(item, true)}
+                                activeOpacity={0.8}
+                              >
+                                <IconSymbol name="pencil" size={15} color="#b45309" />
+                                <Text style={styles.itemEditReviewText}>Sửa đánh giá</Text>
+                              </TouchableOpacity>
+                            ) : (
+                              <TouchableOpacity
+                                style={styles.itemReviewBtn}
+                                onPress={() => handleOpenReviewModal(item)}
+                                activeOpacity={0.8}
+                              >
+                                <IconSymbol name="star.fill" size={15} color="#f59e0b" />
+                                <Text style={styles.itemReviewBtnText}>Đánh giá sản phẩm</Text>
+                              </TouchableOpacity>
+                            )
+                          )}
+
+                          {isReturnWindowValid && (!order.return_status || order.return_status === 'Rejected') && (
+                            <TouchableOpacity
+                              style={styles.itemReturnBtn}
+                              onPress={() => handleOpenReturnModal(item)}
+                              activeOpacity={0.8}
+                            >
+                              <IconSymbol name="arrow.2.squarepath" size={15} color="#111827" />
+                              <Text style={styles.itemReturnBtnText}>Yêu cầu Đổi size / Đổi trả</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      )}
+                    </View>
                   ))}
                 </View>
               </View>
@@ -724,6 +728,7 @@ export default function OrderDetailsScreen() {
                     onPress={() => router.push('/products')}
                     activeOpacity={0.85}
                   >
+                    <IconSymbol name="bag" size={16} color="#ffffff" />
                     <Text style={styles.reviewBtnText}>TIẾP TỤC MUA SẮM</Text>
                   </TouchableOpacity>
                   
@@ -733,6 +738,7 @@ export default function OrderDetailsScreen() {
                     onPress={() => router.push('/orders')}
                     activeOpacity={0.85}
                   >
+                    <IconSymbol name="arrow.left" size={16} color="#111827" />
                     <Text style={styles.reorderBtnText}>QUAY LẠI ĐƠN HÀNG</Text>
                   </TouchableOpacity>
                 </View>
@@ -1335,15 +1341,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#111827',
+    backgroundColor: '#059669',
     paddingVertical: 14,
     borderRadius: 24,
     gap: 8,
-    shadowColor: '#000000',
+    shadowColor: '#059669',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.25,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 3,
   },
   confirmReceiptBtnText: {
     color: '#ffffff',
@@ -1355,15 +1361,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: '#fffbeb',
     borderWidth: 1.5,
-    borderColor: '#111827',
+    borderColor: '#d97706',
     paddingVertical: 14,
     borderRadius: 24,
     gap: 8,
   },
   requestReturnBtnText: {
-    color: '#111827',
+    color: '#b45309',
     fontSize: 13,
     fontWeight: '700',
     letterSpacing: 0.5,
@@ -1420,29 +1426,40 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   reviewBtn: {
-    backgroundColor: '#f3f4f6',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#000000',
     paddingVertical: 14,
     borderRadius: 24,
-    alignItems: 'center',
+    gap: 8,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 2,
   },
   reviewBtnText: {
-    color: '#1f2937',
+    color: '#ffffff',
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
     letterSpacing: 0.5,
   },
   reorderBtn: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1.5,
+    borderColor: '#111827',
     paddingVertical: 14,
     borderRadius: 24,
-    alignItems: 'center',
+    gap: 8,
   },
   reorderBtnText: {
-    color: '#4b5563',
+    color: '#111827',
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
     letterSpacing: 0.5,
   },
 
@@ -1567,40 +1584,81 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginTop: 4,
   },
-  /* Item Review Button & Badge */
-  itemActionRow: {
-    marginTop: 8,
+  /* Product Item Card & Prominent Actions */
+  orderItemCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    padding: 16,
+  },
+  orderItemMain: {
+    flexDirection: 'row',
+    gap: 16,
     alignItems: 'flex-start',
+  },
+  itemBottomActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 14,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
   },
   itemReviewBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#121212',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    gap: 8,
+    backgroundColor: '#111827',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   itemReviewBtnText: {
     color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
-  itemReviewedBadge: {
+  itemEditReviewBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#f0fdf4',
+    gap: 8,
+    backgroundColor: '#fffbeb',
     borderWidth: 1,
-    borderColor: '#bbf7d0',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    borderColor: '#fde68a',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
   },
-  itemReviewedText: {
-    color: '#16a34a',
-    fontSize: 11,
-    fontWeight: '600',
+  itemEditReviewText: {
+    color: '#b45309',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  itemReturnBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#ffffff',
+    borderWidth: 1.5,
+    borderColor: '#111827',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  itemReturnBtnText: {
+    color: '#111827',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   /* Review Modal */
   modalOverlay: {
@@ -1776,22 +1834,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#1a1c1c',
   },
-  itemReturnBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#fffdf5',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#fde68a',
-  },
-  itemReturnBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#b78103',
-  },
+
   returnPolicyCard: {
     backgroundColor: '#ffffff',
     borderRadius: 10,
