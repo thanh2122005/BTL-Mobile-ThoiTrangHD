@@ -716,42 +716,42 @@ export default function AdminScreen() {
   }, [returnTickets, returnStatusFilter, returnSearch]);
 
   const tabsList = [
-    { key: 'overview', label: 'Tổng quan & Báo cáo', icon: 'square.grid.2x2' },
+    { key: 'overview', label: 'Tổng quan', icon: 'square.grid.2x2' },
     {
       key: 'orders',
-      label: 'Quản lý Đơn hàng',
+      label: 'Đơn hàng',
       icon: 'cube.box',
       badge: stats.pendingOrders > 0 ? `${stats.pendingOrders}` : `${orders.length}`,
       badgeAlert: stats.pendingOrders > 0,
     },
     {
       key: 'returns',
-      label: 'Đổi Trả & Bảo Hành',
+      label: 'Đổi trả',
       icon: 'arrow.2.squarepath',
       badge: returnStats.requested > 0 ? `${returnStats.requested}` : (returnStats.total > 0 ? `${returnStats.total}` : undefined),
       badgeAlert: returnStats.requested > 0,
     },
     {
       key: 'products',
-      label: 'Kho Sản phẩm',
+      label: 'Sản phẩm',
       icon: 'bag',
       badge: `${products.length}`,
     },
     {
       key: 'inventory',
-      label: 'Nhập Kho',
+      label: 'Nhập kho',
       icon: 'cube.box',
       badge: stockImports.length > 0 ? `${stockImports.length}` : undefined,
     },
     {
       key: 'users',
-      label: 'Khách hàng (CRM)',
+      label: 'Khách hàng',
       icon: 'person.fill',
       badge: `${users.length}`,
     },
     {
       key: 'vouchers',
-      label: 'Mã Giảm Giá',
+      label: 'Mã giảm giá',
       icon: 'banknote',
       badge: `${vouchers.length}`,
     },
@@ -864,104 +864,63 @@ export default function AdminScreen() {
           </View>
         </View>
 
-        {/* Navigation Tabs Bar - Symmetrical & Centered */}
+        {/* Navigation Tabs Bar - Premium Segmented Ribbon */}
         <View style={styles.tabsContainer}>
           <View style={styles.tabsWrapper}>
-            {isLargeScreen ? (
-              <View style={styles.tabsRowDesktop}>
-                {tabsList.map((tab) => {
-                  const isActive = activeTab === tab.key;
-                  return (
-                    <TouchableOpacity
-                      key={tab.key}
-                      style={[styles.tabDesktop, isActive && styles.tabDesktopActive]}
-                      onPress={() => setActiveTab(tab.key as AdminTab)}
-                      activeOpacity={0.7}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.tabsScrollContent}
+            >
+              {tabsList.map((tab) => {
+                const isActive = activeTab === tab.key;
+                return (
+                  <TouchableOpacity
+                    key={tab.key}
+                    style={[
+                      styles.tabItemPill,
+                      isActive && styles.tabItemPillActive,
+                    ]}
+                    onPress={() => setActiveTab(tab.key as AdminTab)}
+                    activeOpacity={0.75}
+                  >
+                    <IconSymbol
+                      name={tab.icon as any}
+                      size={15}
+                      color={isActive ? '#ffffff' : '#64748b'}
+                    />
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.tabItemText,
+                        isActive && styles.tabItemTextActive,
+                      ]}
                     >
-                      <View style={styles.tabInnerRow}>
-                        <IconSymbol
-                          name={tab.icon as any}
-                          size={16}
-                          color={isActive ? '#0f172a' : '#64748b'}
-                        />
-                        <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
-                          {tab.label}
+                      {tab.label}
+                    </Text>
+                    {tab.badge ? (
+                      <View
+                        style={[
+                          styles.tabBadgePill,
+                          isActive && styles.tabBadgePillActive,
+                          tab.badgeAlert && (isActive ? styles.tabBadgeAlertPillActive : styles.tabBadgeAlertPill),
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.tabBadgeText,
+                            isActive && styles.tabBadgeTextActive,
+                            tab.badgeAlert && (isActive ? styles.tabBadgeAlertTextActive : styles.tabBadgeAlertText),
+                          ]}
+                        >
+                          {tab.badge}
                         </Text>
-                        {tab.badge ? (
-                          <View
-                            style={[
-                              styles.tabBadge,
-                              isActive && styles.tabBadgeActive,
-                              tab.badgeAlert && styles.tabBadgeAlert,
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.tabBadgeText,
-                                isActive && styles.tabBadgeTextActive,
-                                tab.badgeAlert && styles.tabBadgeAlertText,
-                              ]}
-                            >
-                              {tab.badge}
-                            </Text>
-                          </View>
-                        ) : null}
                       </View>
-                      {isActive && <View style={styles.tabActiveIndicator} />}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            ) : (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.tabsScrollMobile}
-              >
-                {tabsList.map((tab) => {
-                  const isActive = activeTab === tab.key;
-                  return (
-                    <TouchableOpacity
-                      key={tab.key}
-                      style={[styles.tabMobile, isActive && styles.tabMobileActive]}
-                      onPress={() => setActiveTab(tab.key as AdminTab)}
-                      activeOpacity={0.7}
-                    >
-                      <View style={styles.tabInnerRow}>
-                        <IconSymbol
-                          name={tab.icon as any}
-                          size={15}
-                          color={isActive ? '#0f172a' : '#64748b'}
-                        />
-                        <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
-                          {tab.label}
-                        </Text>
-                        {tab.badge ? (
-                          <View
-                            style={[
-                              styles.tabBadge,
-                              isActive && styles.tabBadgeActive,
-                              tab.badgeAlert && styles.tabBadgeAlert,
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.tabBadgeText,
-                                isActive && styles.tabBadgeTextActive,
-                                tab.badgeAlert && styles.tabBadgeAlertText,
-                              ]}
-                            >
-                              {tab.badge}
-                            </Text>
-                          </View>
-                        ) : null}
-                      </View>
-                      {isActive && <View style={styles.tabActiveIndicator} />}
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            )}
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
         </View>
       </View>
@@ -3605,84 +3564,78 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  /* TABS CONTAINER - Clean, Balanced & Centered */
+  /* TABS CONTAINER - Premium Segmented Ribbon */
   tabsContainer: {
     backgroundColor: '#ffffff',
-    borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+    elevation: 2,
+    zIndex: 10,
   },
   tabsWrapper: {
-    maxWidth: 1120,
+    maxWidth: 1140,
     alignSelf: 'center',
     width: '100%',
   },
-  tabsRowDesktop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '100%',
-  },
-  tabDesktop: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    position: 'relative',
-  },
-  tabDesktopActive: {
-    backgroundColor: '#fafaf9',
-  },
-  tabsScrollMobile: {
+  tabsScrollContent: {
     paddingHorizontal: 16,
     paddingVertical: 10,
-    gap: 12,
-  },
-  tabMobile: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    position: 'relative',
-  },
-  tabMobileActive: {
-    backgroundColor: '#fafaf9',
-    borderRadius: 8,
-  },
-  tabInnerRow: {
+    gap: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
-  tabText: {
+  tabItemPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  tabItemPillActive: {
+    backgroundColor: '#0f172a',
+    borderColor: '#0f172a',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  tabItemText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#64748b',
+    color: '#475569',
   },
-  tabTextActive: {
-    color: '#0f172a',
+  tabItemTextActive: {
+    color: '#ffffff',
     fontWeight: '700',
   },
-  tabActiveIndicator: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 2.5,
-    backgroundColor: '#0f172a',
-    borderTopLeftRadius: 3,
-    borderTopRightRadius: 3,
-  },
-  tabBadge: {
+  tabBadgePill: {
     backgroundColor: '#e2e8f0',
-    paddingHorizontal: 6,
+    paddingHorizontal: 6.5,
     paddingVertical: 1.5,
-    borderRadius: 10,
+    borderRadius: 12,
   },
-  tabBadgeActive: {
-    backgroundColor: '#0f172a',
+  tabBadgePillActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
   },
-  tabBadgeAlert: {
-    backgroundColor: '#fef2f2',
+  tabBadgeAlertPill: {
+    backgroundColor: '#fee2e2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  tabBadgeAlertPillActive: {
+    backgroundColor: '#ef4444',
   },
   tabBadgeText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
     color: '#475569',
   },
@@ -3690,7 +3643,12 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   tabBadgeAlertText: {
-    color: '#ef4444',
+    color: '#dc2626',
+    fontWeight: '800',
+  },
+  tabBadgeAlertTextActive: {
+    color: '#ffffff',
+    fontWeight: '800',
   },
 
   /* BODY */
