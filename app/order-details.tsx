@@ -1075,11 +1075,12 @@ export default function OrderDetailsScreen() {
               <Text style={styles.formGroupLabel}>LÝ DO ĐỔI TRẢ / BẢO HÀNH:</Text>
               <View style={{ gap: 8, marginBottom: 14 }}>
                 {[
-                  { key: 'size', label: 'Mặc không vừa (Cần đổi sang size khác)', icon: '📏' },
-                  { key: 'color', label: 'Muốn đổi sang màu sắc khác', icon: '🎨' },
+                  { key: 'size', label: 'Mặc không vừa (Chỉ đổi sang size khác)', icon: '📏' },
+                  { key: 'color', label: 'Muốn đổi sang màu sắc khác (Giữ nguyên size)', icon: '🎨' },
+                  { key: 'both', label: 'Đổi cả kích thước (size) & màu sắc mới', icon: '🔄' },
                   { key: 'defect', label: 'Lỗi sản xuất (Bung chỉ, hỏng khóa kéo, lỗi vải)', icon: '🧵' },
                   { key: 'wrong', label: 'Shop giao sai mẫu / sai size so với đơn', icon: '📦' },
-                  { key: 'refund', label: 'Trả hàng & hoàn tiền (Không đúng mô tả / không ưng ý)', icon: '🔄' },
+                  { key: 'refund', label: 'Trả hàng & hoàn tiền (Không đúng mô tả / không ưng ý)', icon: '💰' },
                 ].map((r) => {
                   const isActive = returnReason === r.key;
                   return (
@@ -1096,6 +1097,23 @@ export default function OrderDetailsScreen() {
                   );
                 })}
               </View>
+
+              {/* Banner hướng dẫn khi đổi cả size và màu */}
+              {returnReason === 'both' && (
+                <View style={{ backgroundColor: '#fefce8', borderWidth: 1, borderColor: '#fef08a', padding: 12, borderRadius: 8, marginBottom: 16 }}>
+                  <Text style={{ fontSize: 12.5, color: '#854d0e', fontWeight: '700' }}>
+                    🔄 Bạn đang chọn đổi cả Kích thước (Size) và Màu sắc mới:
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 16, marginTop: 4, flexWrap: 'wrap' }}>
+                    <Text style={{ fontSize: 12, color: '#a16207' }}>
+                      • Size muốn đổi: <Text style={{ fontWeight: '700', color: targetSize ? '#0f172a' : '#dc2626' }}>{targetSize || '(Chưa chọn size)'}</Text>
+                    </Text>
+                    <Text style={{ fontSize: 12, color: '#a16207' }}>
+                      • Màu muốn đổi: <Text style={{ fontWeight: '700', color: targetColor ? '#0f172a' : '#dc2626' }}>{targetColor || '(Chưa chọn màu)'}</Text>
+                    </Text>
+                  </View>
+                </View>
+              )}
 
               {/* Target Size selector synchronized with specific product variants */}
               {(returnReason === 'size' || returnReason === 'both') && (
