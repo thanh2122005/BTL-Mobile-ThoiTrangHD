@@ -232,11 +232,13 @@ export const VoucherModal: React.FC<VoucherModalProps> = ({
                         </View>
 
                         <View style={styles.voucherMainInfo}>
-                          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
-                            <Text style={styles.voucherDiscount}>{discLabel}</Text>
-                            <Text style={styles.voucherSavingsText}>(-{formatVND(savings)})</Text>
-                          </View>
-                          <Text style={styles.voucherMinSpend}>{minSpendLabel}</Text>
+                          <Text style={styles.voucherDiscount} numberOfLines={1}>{discLabel}</Text>
+                          {savings > 0 && (
+                            <Text style={styles.voucherSavingsText} numberOfLines={1}>
+                              Tiết kiệm {formatVND(savings)}
+                            </Text>
+                          )}
+                          <Text style={styles.voucherMinSpend} numberOfLines={1}>{minSpendLabel}</Text>
                           <View style={styles.eligibleTag}>
                             <Text style={styles.eligibleTagText}>✓ Đủ điều kiện</Text>
                           </View>
@@ -564,18 +566,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#fcf8ec',
     paddingVertical: 10,
-    paddingHorizontal: 8,
+    paddingHorizontal: 4,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#f2e4c2',
-    width: 80,
+    width: 72,
+    flexShrink: 0,
   },
   ineligibleLeftBadge: {
     backgroundColor: '#dedede',
     borderColor: '#cecece',
   },
   voucherCodeBadge: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
     color: '#b78103',
     marginTop: 4,
@@ -583,21 +586,24 @@ const styles = StyleSheet.create({
   },
   voucherMainInfo: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: 10,
     justifyContent: 'center',
+    minWidth: 0,
+    overflow: 'hidden',
   },
   voucherDiscount: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '800',
     color: '#1a1c1c',
   },
   voucherSavingsText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     color: '#2e7d32',
+    marginTop: 1,
   },
   voucherMinSpend: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#666666',
     marginTop: 2,
   },
@@ -626,13 +632,15 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
+    minWidth: 72,
   },
   applyBtn: {
     backgroundColor: '#1a1c1c',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 6,
-    minWidth: 78,
+    minWidth: 72,
     alignItems: 'center',
   },
   applyBtnLoading: {
@@ -647,9 +655,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#e8f5e9',
     borderWidth: 1,
     borderColor: '#2e7d32',
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 6,
+    minWidth: 72,
+    alignItems: 'center',
   },
   appliedBadgeText: {
     color: '#2e7d32',
