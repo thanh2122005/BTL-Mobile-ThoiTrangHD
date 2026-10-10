@@ -185,7 +185,7 @@ export default function CartScreen() {
         </View>
       )}
 
-      <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+      <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView} contentContainerStyle={[styles.scrollContent, isMobile && { paddingHorizontal: 14, paddingTop: 16 }]}>
         
         <Text style={styles.pageTitle}>Giỏ hàng của tôi ({cart.reduce((s, i) => s + i.quantity, 0)})</Text>
 
@@ -270,7 +270,7 @@ export default function CartScreen() {
                 
                 return (
                   <View key={itemKey}>
-                    <View style={styles.cartItem}>
+                    <View style={[styles.cartItem, isMobile && { gap: 10 }]}>
                       <TouchableOpacity
                         style={styles.itemCheckbox}
                         activeOpacity={0.7}
@@ -284,14 +284,14 @@ export default function CartScreen() {
                         />
                       </TouchableOpacity>
 
-                      <View style={styles.itemImageContainer}>
+                      <View style={[styles.itemImageContainer, isMobile && { width: 82, height: 104 }]}>
                         <Image source={imageSource} style={styles.itemImage} contentFit="cover" />
                       </View>
                       
                       <View style={styles.itemDetails}>
                         <View style={styles.itemHeader}>
-                          <View style={styles.itemTitleContainer}>
-                            <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
+                          <View style={[styles.itemTitleContainer, isMobile && { paddingRight: 8 }]}>
+                            <Text style={[styles.itemName, isMobile && { fontSize: 14, lineHeight: 20 }]} numberOfLines={2}>{item.name}</Text>
                             <TouchableOpacity
                               style={styles.variantSelectorChip}
                               onPress={() => handleOpenVariantModal(item)}
@@ -309,7 +309,7 @@ export default function CartScreen() {
                           </TouchableOpacity>
                         </View>
                         
-                        <View style={styles.itemFooter}>
+                        <View style={[styles.itemFooter, isMobile && { marginTop: 8 }]}>
                           <View style={styles.quantityControl}>
                             <TouchableOpacity style={styles.qtyBtn} onPress={() => decreaseQuantity(item.cartItemId || item.id)}>
                               <IconSymbol name="minus" size={16} color="#1a1c1c" />
@@ -319,7 +319,7 @@ export default function CartScreen() {
                               <IconSymbol name="plus" size={16} color="#1a1c1c" />
                             </TouchableOpacity>
                           </View>
-                          <Text style={styles.itemPrice}>{formattedPrice}</Text>
+                          <Text style={[styles.itemPrice, isMobile && { fontSize: 16 }]} numberOfLines={1}>{formattedPrice}</Text>
                         </View>
                       </View>
                     </View>
@@ -375,25 +375,25 @@ export default function CartScreen() {
                   
                   {appliedVoucher ? (
                     <View style={styles.appliedVoucherBox}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
-                        <IconSymbol name="tag.fill" size={18} color="#b78103" />
-                        <View>
-                          <Text style={styles.appliedVoucherText}>Mã: {appliedVoucher.code}</Text>
-                          <Text style={{ fontSize: 11, color: '#2e7d32', fontWeight: '600' }}>
-                            {(appliedVoucher.discount_type === 'percent' || appliedVoucher.discountType === 'percent') 
-                              ? `Giảm ${appliedVoucher.value}%` 
-                              : `Giảm ${formatVND(appliedVoucher.value)}`} (Tiết kiệm {formatVND(discountAmount)})
-                          </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, marginRight: 8 }}>
+                          <IconSymbol name="tag.fill" size={16} color="#b78103" />
+                          <Text style={styles.appliedVoucherText} numberOfLines={1}>Mã: {appliedVoucher.code}</Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+                          <TouchableOpacity onPress={() => setShowVoucherModal(true)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                            <Text style={{ color: '#b78103', fontSize: 12, fontWeight: '700' }}>Đổi mã</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity onPress={removeVoucher} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                            <Text style={styles.removeVoucherText}>Gỡ bỏ</Text>
+                          </TouchableOpacity>
                         </View>
                       </View>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                        <TouchableOpacity onPress={() => setShowVoucherModal(true)}>
-                          <Text style={{ color: '#b78103', fontSize: 12, fontWeight: '700' }}>Đổi mã</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity onPress={removeVoucher}>
-                          <Text style={styles.removeVoucherText}>Gỡ bỏ</Text>
-                        </TouchableOpacity>
-                      </View>
+                      <Text style={{ fontSize: 11, color: '#2e7d32', fontWeight: '600', paddingLeft: 22 }} numberOfLines={1}>
+                        {(appliedVoucher.discount_type === 'percent' || appliedVoucher.discountType === 'percent') 
+                          ? `Giảm ${appliedVoucher.value}%` 
+                          : `Giảm ${formatVND(appliedVoucher.value)}`} (Tiết kiệm {formatVND(discountAmount)})
+                      </Text>
                     </View>
                   ) : (
                     <View style={styles.voucherInputRow}>
@@ -739,6 +739,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 32,
+    paddingBottom: 120,
     maxWidth: 1280,
     alignSelf: 'center',
     width: '100%',
@@ -934,12 +935,9 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   appliedVoucherBox: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     backgroundColor: '#f5efe6',
     padding: 12,
-    borderRadius: 6,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: '#e1c28e',
   },
