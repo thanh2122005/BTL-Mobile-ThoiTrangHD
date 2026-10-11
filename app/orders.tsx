@@ -31,7 +31,7 @@ export default function OrdersScreen() {
   const { addToCart } = useCart();
   const [orderToCancel, setOrderToCancel] = useState<any | null>(null);
   const [isCancellingOrder, setIsCancellingOrder] = useState(false);
-  const { isLargeScreen } = useResponsive();
+  const { isMobile, isLargeScreen } = useResponsive();
   const [activeTab, setActiveTab] = useState('TẤT CẢ');
   const [orders, setOrders] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -245,7 +245,7 @@ export default function OrdersScreen() {
       
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerContent}>
+        <View style={[styles.headerContent, isMobile && { paddingHorizontal: 12, paddingVertical: 10 }]}>
           <TouchableOpacity
             style={styles.iconButton}
             onPress={() => router.back()}
@@ -268,7 +268,7 @@ export default function OrdersScreen() {
 
       {/* Search Bar */}
       <View style={styles.searchBarWrapper}>
-        <View style={styles.searchBarInner}>
+        <View style={[styles.searchBarInner, isMobile && { paddingHorizontal: 12 }]}>
           <View style={styles.orderSearchBar}>
             <IconSymbol name="magnifyingglass" size={18} color="#747878" />
             <TextInput
@@ -324,7 +324,7 @@ export default function OrdersScreen() {
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+      <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView} contentContainerStyle={[styles.scrollContent, isMobile && { paddingHorizontal: 12, paddingTop: 14, gap: 14 }]}>
         {loading ? (
           <ActivityIndicator size="large" color="#000000" style={{ marginTop: 40 }} />
         ) : !user ? (
@@ -361,7 +361,7 @@ export default function OrdersScreen() {
               );
 
               return (
-                <View key={order.id || order.order_code} style={styles.orderCard}>
+                <View key={order.id || order.order_code} style={[styles.orderCard, isMobile && { padding: 12, borderRadius: 10 }]}>
                   
                   <View style={styles.orderHeader}>
                     <View>
@@ -400,14 +400,14 @@ export default function OrdersScreen() {
                     const isThisItemReviewed = reviewedForThisOrder.includes(itemIdStr);
 
                     return (
-                      <View key={`${item.id || index}`} style={styles.orderItem}>
-                        <View style={styles.itemImageContainer}>
+                      <View key={`${item.id || index}`} style={[styles.orderItem, isMobile && { gap: 10, marginBottom: 14 }]}>
+                        <View style={[styles.itemImageContainer, isMobile && { width: 68, height: 82 }]}>
                           <Image source={getImageSource(item.image)} style={styles.itemImage} contentFit="cover" />
                         </View>
                         <View style={styles.itemDetails}>
-                          <Text style={styles.itemName} numberOfLines={1}>{item.product_name || item.name}</Text>
-                          <Text style={styles.itemVariant}>Size: {item.size || 'M'} | Màu: {item.color === '#000000' ? 'Đen' : item.color}</Text>
-                          <Text style={styles.itemQty}>x{item.quantity}</Text>
+                          <Text style={[styles.itemName, isMobile && { fontSize: 14 }]} numberOfLines={1}>{item.product_name || item.name}</Text>
+                          <Text style={[styles.itemVariant, isMobile && { fontSize: 12, marginBottom: 4 }]}>Size: {item.size || 'M'} | Màu: {item.color === '#000000' ? 'Đen' : item.color}</Text>
+                          <Text style={[styles.itemQty, isMobile && { fontSize: 12 }]}>x{item.quantity}</Text>
                           
                           {isCompleted && (
                             <View style={{ marginTop: 6 }}>
@@ -429,7 +429,7 @@ export default function OrdersScreen() {
                           )}
                         </View>
                         <View style={styles.itemPriceContainer}>
-                          <Text style={styles.itemPrice}>{formatVND(item.price || 0)}</Text>
+                          <Text style={[styles.itemPrice, isMobile && { fontSize: 14, fontWeight: '600' }]}>{formatVND(item.price || 0)}</Text>
                         </View>
                       </View>
                     );
@@ -455,8 +455,13 @@ export default function OrdersScreen() {
 
                   <View style={styles.orderFooter}>
                     <View style={styles.totalRow}>
-                      <Text style={styles.totalLabel}>Tổng tiền:</Text>
-                      <Text style={styles.totalValue}>{formattedTotal}</Text>
+                      <Text style={styles.totalCountText}>
+                        {items.reduce((acc: number, it: any) => acc + (Number(it.quantity) || 1), 0)} sản phẩm
+                      </Text>
+                      <View style={styles.totalPriceGroup}>
+                        <Text style={styles.totalLabel}>Thành tiền:</Text>
+                        <Text style={[styles.totalValue, isMobile && { fontSize: 17 }]}>{formattedTotal}</Text>
+                      </View>
                     </View>
                     <View style={styles.orderActions}>
                       {(order.status || '').toLowerCase() === 'pending' && (
@@ -479,6 +484,14 @@ export default function OrdersScreen() {
                         <Text style={styles.reorderActionBtnText}>MUA LẠI</Text>
                       </TouchableOpacity>
 
+                      <TouchableOpacity 
+                        style={styles.detailBtn} 
+                        onPress={() => router.push(`/order-details?id=${order.id}`)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.detailBtnText}>CHI TIẾT</Text>
+                      </TouchableOpacity>
+
                       {isCompleted && (
                         <TouchableOpacity 
                           style={[styles.reviewBtn, isAllReviewed && styles.reviewedBtn]} 
@@ -495,16 +508,8 @@ export default function OrdersScreen() {
                           </Text>
                         </TouchableOpacity>
                       )}
-                      <TouchableOpacity 
-                        style={styles.detailBtn} 
-                        onPress={() => router.push(`/order-details?id=${order.id}`)}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={styles.detailBtnText}>CHI TIẾT</Text>
-                      </TouchableOpacity>
                     </View>
                   </View>
-
                 </View>
               );
             })}
@@ -842,10 +847,10 @@ const styles = StyleSheet.create({
   },
   tabDesktopActive: {},
   tabsScrollMobile: {
-    paddingHorizontal: 16,
-    paddingTop: 14,
+    paddingHorizontal: 12,
+    paddingTop: 12,
     paddingBottom: 2,
-    gap: 20,
+    gap: 14,
     flexDirection: 'row',
     alignItems: 'center',
   },
@@ -855,10 +860,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   tabText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: '#747878',
-    letterSpacing: 0.5,
+    letterSpacing: 0.2,
   },
   tabTextActive: {
     color: '#121212',
@@ -879,7 +884,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 24,
-    paddingBottom: 40,
+    paddingBottom: 80,
     maxWidth: 860,
     alignSelf: 'center',
     width: '100%',
@@ -1032,42 +1037,57 @@ const styles = StyleSheet.create({
     color: '#000000',
   },
   orderFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(196, 199, 199, 0.25)',
+    paddingTop: 12,
+    marginTop: 10,
   },
   totalRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    marginBottom: 10,
+  },
+  totalCountText: {
+    fontSize: 13,
+    color: '#64748b',
+    fontWeight: '400',
+  },
+  totalPriceGroup: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
   },
   totalLabel: {
-    fontSize: 14,
-    color: '#444748',
+    fontSize: 13,
+    color: '#64748b',
+    fontWeight: '500',
   },
   totalValue: {
-    fontSize: 24,
-    fontWeight: '500',
-    color: '#000000',
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0f172a',
   },
   orderActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    justifyContent: 'flex-end',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   detailBtn: {
-    paddingHorizontal: 22,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
     borderWidth: 1,
-    borderColor: '#000000',
-    borderRadius: 24,
+    borderColor: '#0f172a',
+    borderRadius: 6,
+    backgroundColor: '#ffffff',
   },
   detailBtnText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#000000',
-    letterSpacing: 1,
+    color: '#0f172a',
+    letterSpacing: 0.5,
   },
   cancelActionBtn: {
     flexDirection: 'row',
@@ -1077,13 +1097,13 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#ffcdd2',
-    backgroundColor: '#ffebee',
+    borderColor: '#fca5a5',
+    backgroundColor: '#fef2f2',
   },
   cancelActionBtnText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#ba1a1a',
+    color: '#dc2626',
   },
   reorderActionBtn: {
     flexDirection: 'row',
@@ -1093,22 +1113,22 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: '#e2e8f0',
     backgroundColor: '#ffffff',
   },
   reorderActionBtnText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#1a1c1c',
+    color: '#1e293b',
   },
   reviewBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-    backgroundColor: '#000000',
-    borderRadius: 24,
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    backgroundColor: '#0f172a',
+    borderRadius: 6,
   },
   reviewBtnText: {
     fontSize: 12,
@@ -1119,7 +1139,7 @@ const styles = StyleSheet.create({
   reviewedBtn: {
     backgroundColor: '#f0fdf4',
     borderWidth: 1,
-    borderColor: '#bbf7d0',
+    borderColor: '#86efac',
   },
   reviewedBtnText: {
     color: '#16a34a',
