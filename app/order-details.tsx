@@ -88,6 +88,7 @@ interface OrderDetail {
   customer_phone: string;
   customer_address: string;
   payment_method: string;
+  payment_status?: string;
   total_price: number;
   status: string;
   created_at: string;
@@ -474,14 +475,14 @@ export default function OrderDetailsScreen() {
     if (!order || isSimulatingPayment) return;
     setIsSimulatingPayment(true);
     try {
-      const res = await fetch(`${API_URL}/api/orders/${order.id}/simulate-bank-payment`, {
+      const res = await fetch(`${API_URL}/api/orders/${order.id}/confirm-payment-transfer`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
       });
       const data = await res.json();
       if (data && data.success) {
-        setOrder(prev => prev ? { ...prev, status: 'Processing' } : null);
-        Alert.alert('Thành công', 'Đã ghi nhận thanh toán thành công (Mô phỏng Sandbox)! Đơn hàng chuyển sang trạng thái "Đang chuẩn bị hàng".');
+        setOrder(prev => prev ? { ...prev, payment_status: 'paid_pending_verification' } : null);
+        Alert.alert('Đã gửi xác nhận', 'Đã gửi thông báo chuyển khoản thành công tới cửa hàng! Shop sẽ kiểm tra đối soát sao kê và chuẩn bị hàng cho bạn ngay.');
       } else {
         Alert.alert('Thông báo', data.message || 'Không thể xác nhận thanh toán');
       }
@@ -916,37 +917,66 @@ export default function OrderDetailsScreen() {
                       • Nội dung: <Text style={{ fontWeight: '700', color: '#b45309' }}>{order.order_code}</Text>
                     </Text>
 
-                    {/* Simulation Action Button for Coursework / Testing */}
-                    <TouchableOpacity
-                      style={{
-                        backgroundColor: '#16a34a',
-                        flexDirection: 'row',
+                    {/* Customer Bank Transfer Confirmation Section */}
+                    {order.payment_status === 'paid_pending_verification' ? (
+                      <View style={{
+                        backgroundColor: '#f5f3ff',
+                        borderColor: '#ddd6fe',
+                        borderWidth: 1,
+                        borderRadius: 10,
+                        padding: 14,
+                        marginTop: 12,
                         alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 8,
-                        paddingVertical: 10,
-                        paddingHorizontal: 14,
-                        borderRadius: 8,
-                        marginTop: 10,
-                      }}
-                      onPress={handleSimulateBankPayment}
-                      disabled={isSimulatingPayment}
-                      activeOpacity={0.8}
-                    >
-                      {isSimulatingPayment ? (
-                        <ActivityIndicator size="small" color="#ffffff" />
-                      ) : (
-                        <>
-                          <IconSymbol name="bolt.fill" size={16} color="#ffffff" />
-                          <Text style={{ fontSize: 13, fontWeight: '700', color: '#ffffff' }}>
-                            Xác nhận đã chuyển khoản (Demo / Sandbox)
+                      }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                          <IconSymbol name="clock.arrow.circlepath" size={18} color="#7c3aed" />
+                          <Text style={{ fontSize: 13, fontWeight: '800', color: '#6d28d9' }}>
+                            Đã gửi xác nhận chuyển khoản
                           </Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
-                    <Text style={{ fontSize: 11, color: '#64748b', marginTop: 6, textAlign: 'center' }}>
-                      💡 Dành cho BTL: Nhấn nút trên để mô phỏng duyệt thanh toán mà không cần bank tiền thật.
-                    </Text>
+                        </View>
+                        <Text style={{ fontSize: 12, color: '#5b21b6', textAlign: 'center', lineHeight: 17 }}>
+                          Hệ thống đã ghi nhận thông báo của bạn. Cửa hàng đang đối soát số dư ngân hàng và sẽ duyệt đơn hàng ngay khi nhận được tiền!
+                        </Text>
+                      </View>
+                    ) : (
+                      <>
+                        <TouchableOpacity
+                          style={{
+                            backgroundColor: '#16a34a',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 8,
+                            paddingVertical: 12,
+                            paddingHorizontal: 16,
+                            borderRadius: 10,
+                            marginTop: 12,
+                            shadowColor: '#16a34a',
+                            shadowOffset: { width: 0, height: 2 },
+                            shadowOpacity: 0.2,
+                            shadowRadius: 4,
+                            elevation: 2,
+                          }}
+                          onPress={handleSimulateBankPayment}
+                          disabled={isSimulatingPayment}
+                          activeOpacity={0.8}
+                        >
+                          {isSimulatingPayment ? (
+                            <ActivityIndicator size="small" color="#ffffff" />
+                          ) : (
+                            <>
+                              <IconSymbol name="checkmark.circle.fill" size={17} color="#ffffff" />
+                              <Text style={{ fontSize: 13, fontWeight: '700', color: '#ffffff' }}>
+                                Tôi đã chuyển khoản thành công
+                              </Text>
+                            </>
+                          )}
+                        </TouchableOpacity>
+                        <Text style={{ fontSize: 11, color: '#64748b', marginTop: 8, textAlign: 'center' }}>
+                          💡 Sau khi hoàn tất chuyển tiền qua ứng dụng ngân hàng, bạn bấm nút trên để thông báo cho Shop duyệt đơn.
+                        </Text>
+                      </>
+                    )}
                   </View>
                 )}
 
@@ -1569,6 +1599,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingTop: 16,
     paddingHorizontal: 16,
+    paddingBottom: 80,
     maxWidth: 1280,
     alignSelf: 'center',
     width: '100%',
