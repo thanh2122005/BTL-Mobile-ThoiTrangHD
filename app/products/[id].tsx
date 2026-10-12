@@ -491,7 +491,7 @@ export default function ProductDetailScreen() {
           <View style={[styles.gallerySection, isLargeScreen && styles.gallerySectionLarge]}>
             <Image 
               source={imageSource} 
-              style={[styles.mainImage, isMobile && { height: Math.min(width, 420) }]} 
+              style={styles.mainImage} 
               contentFit="cover" 
             />
             <View style={styles.paginationDots}>
@@ -1203,7 +1203,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 24,
+    paddingBottom: 120,
   },
   mainLayout: {
     maxWidth: 1200,
