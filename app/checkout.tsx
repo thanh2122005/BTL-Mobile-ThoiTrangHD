@@ -250,7 +250,7 @@ export default function CheckoutScreen() {
     );
   }
 
-﻿  return (
+  return (
     <SafeAreaView style={styles.safeArea}>
       {/* Top Header */}
       <View style={styles.header}>
@@ -277,7 +277,7 @@ export default function CheckoutScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, isLargeScreen && styles.containerWide]}
+        contentContainerStyle={[styles.scrollContent, isLargeScreen && styles.containerWide, isMobile && { paddingHorizontal: 12, paddingTop: 14 }]}
       >
         {/* Main 2-Column Grid on Web/Desktop */}
         <View style={[styles.layoutWrapper, isLargeScreen && styles.layoutWrapperDesktop]}>
@@ -286,16 +286,18 @@ export default function CheckoutScreen() {
           <View style={[styles.mainColumn, isLargeScreen && styles.mainColumnDesktop]}>
             
             {/* 1. Delivery Address Card */}
-            <View style={styles.card}>
+            <View style={[styles.card, isMobile && { padding: 14 }]}>
               <View style={styles.cardHeader}>
-                <View style={styles.cardHeaderTitleRow}>
+                <View style={[styles.cardHeaderTitleRow, { flex: 1, marginRight: 8 }]}>
                   <View style={styles.iconBadgeGold}>
                     <IconSymbol name="location" size={16} color="#b78103" />
                   </View>
-                  <Text style={styles.cardTitle}>Thông tin & Địa chỉ nhận hàng</Text>
+                  <Text style={[styles.cardTitle, { flexShrink: 1 }]} numberOfLines={1}>
+                    {isLargeScreen ? 'Thông tin & Địa chỉ nhận hàng' : 'Địa chỉ nhận hàng'}
+                  </Text>
                 </View>
                 <TouchableOpacity
-                  style={styles.changeAddressBtn}
+                  style={[styles.changeAddressBtn, { flexShrink: 0 }]}
                   onPress={() => setShowAddressModal(true)}
                   activeOpacity={0.7}
                 >
@@ -328,17 +330,19 @@ export default function CheckoutScreen() {
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
-                  style={styles.emptyAddressPrompt}
+                  style={[styles.emptyAddressPrompt, isMobile && { padding: 12 }]}
                   onPress={() => setShowAddressModal(true)}
                   activeOpacity={0.8}
                 >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, marginRight: 6 }}>
                     <View style={styles.addCircleSmall}>
                       <IconSymbol name="plus" size={16} color="#ffffff" />
                     </View>
-                    <View>
+                    <View style={{ flex: 1 }}>
                       <Text style={styles.emptyAddressTitle}>Chưa có thông tin nhận hàng</Text>
-                      <Text style={styles.emptyAddressSub}>Bấm vào đây để nhập người nhận, SĐT và địa chỉ</Text>
+                      <Text style={styles.emptyAddressSub} numberOfLines={2}>
+                        Bấm vào đây để nhập người nhận, SĐT và địa chỉ
+                      </Text>
                     </View>
                   </View>
                   <IconSymbol name="chevron.right" size={18} color="#94a3b8" />
@@ -382,15 +386,17 @@ export default function CheckoutScreen() {
             </View>
 
             {/* 2. Order Items Card (Compact & Modern) */}
-            <View style={styles.card}>
+            <View style={[styles.card, isMobile && { padding: 14 }]}>
               <View style={styles.cardHeader}>
-                <View style={styles.cardHeaderTitleRow}>
+                <View style={[styles.cardHeaderTitleRow, { flex: 1, marginRight: 8 }]}>
                   <View style={styles.iconBadgeDark}>
                     <IconSymbol name="bag" size={16} color="#ffffff" />
                   </View>
-                  <Text style={styles.cardTitle}>Sản phẩm đặt mua ({cart.length} món, {totalItemsCount} cái)</Text>
+                  <Text style={[styles.cardTitle, { flexShrink: 1 }]} numberOfLines={1}>
+                    Sản phẩm đặt mua ({cart.length} món, {totalItemsCount} cái)
+                  </Text>
                 </View>
-                <TouchableOpacity onPress={() => router.push('/cart')}>
+                <TouchableOpacity onPress={() => router.push('/cart')} style={{ flexShrink: 0 }}>
                   <Text style={styles.editCartLink}>Xem giỏ hàng</Text>
                 </TouchableOpacity>
               </View>
@@ -403,22 +409,22 @@ export default function CheckoutScreen() {
                   const itemKey = item.cartItemId || `${item.id}-${index}`;
 
                   return (
-                    <View key={itemKey} style={styles.compactItemRow}>
-                      <View style={styles.itemThumbContainer}>
+                    <View key={itemKey} style={[styles.compactItemRow, isMobile && { gap: 10 }]}>
+                      <View style={[styles.itemThumbContainer, isMobile && { width: 56, height: 56 }]}>
                         <Image source={imageSource} style={styles.itemThumb} contentFit="cover" />
                         <View style={styles.itemQtyBadge}>
                           <Text style={styles.itemQtyBadgeText}>x{item.quantity}</Text>
                         </View>
                       </View>
 
-                      <View style={styles.itemMeta}>
-                        <Text style={styles.compactItemName} numberOfLines={2}>
+                      <View style={[styles.itemMeta, isMobile && { paddingRight: 6 }]}>
+                        <Text style={[styles.compactItemName, isMobile && { fontSize: 12 }]} numberOfLines={2}>
                           {item.name}
                         </Text>
                         
-                        <View style={styles.variantAndPriceRow}>
+                        <View style={[styles.variantAndPriceRow, isMobile && { gap: 6 }]}>
                           <TouchableOpacity
-                            style={styles.compactVariantChip}
+                            style={[styles.compactVariantChip, isMobile && { maxWidth: 110 }]}
                             onPress={() => handleOpenVariantModal(item)}
                             activeOpacity={0.7}
                           >
@@ -428,7 +434,7 @@ export default function CheckoutScreen() {
                                 { backgroundColor: item.color || '#000000' },
                               ]}
                             />
-                            <Text style={styles.compactVariantText}>
+                            <Text style={styles.compactVariantText} numberOfLines={1}>
                               {getColorLabel(item.color)} • Size {item.size || 'M'}
                             </Text>
                             <IconSymbol name="chevron.right" size={10} color="#94a3b8" />
@@ -452,8 +458,8 @@ export default function CheckoutScreen() {
                         </View>
                       </View>
 
-                      <View style={styles.itemPriceCol}>
-                        <Text style={styles.compactItemPrice}>{formattedItemTotal}</Text>
+                      <View style={[styles.itemPriceCol, isMobile && { minWidth: 68 }]}>
+                        <Text style={[styles.compactItemPrice, isMobile && { fontSize: 13 }]} numberOfLines={1}>{formattedItemTotal}</Text>
                         {item.quantity > 1 && (
                           <Text style={styles.compactUnitPrice}>{formatVND(priceNum)}/cái</Text>
                         )}
@@ -471,7 +477,7 @@ export default function CheckoutScreen() {
             </View>
 
             {/* 3. Payment Method Card */}
-            <View style={styles.card}>
+            <View style={[styles.card, isMobile && { padding: 14 }]}>
               <View style={styles.cardHeader}>
                 <View style={styles.cardHeaderTitleRow}>
                   <View style={styles.iconBadgeDark}>
@@ -577,28 +583,28 @@ export default function CheckoutScreen() {
 
               {appliedVoucher ? (
                 <View style={styles.appliedVoucherContainer}>
-                  <View style={styles.appliedVoucherLeft}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                     <View style={styles.appliedVoucherTag}>
                       <Text style={styles.appliedVoucherCode}>{appliedVoucher.code}</Text>
                     </View>
-                    <View>
-                      <Text style={styles.appliedVoucherSavings}>
-                        Tiết kiệm {formatVND(discountAmount)}
-                      </Text>
-                      <Text style={styles.appliedVoucherSub}>
-                        {appliedVoucher.discount_type === 'percent' || appliedVoucher.discountType === 'percent'
-                          ? `Giảm ${appliedVoucher.value}% trên giá trị đơn hàng`
-                          : `Giảm ${formatVND(appliedVoucher.value)}`}
-                      </Text>
+                    <View style={styles.appliedVoucherActions}>
+                      <TouchableOpacity onPress={() => setShowVoucherModal(true)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                        <Text style={styles.changeVoucherLink}>Đổi mã</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={removeVoucher} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                        <Text style={styles.removeVoucherLink}>Gỡ bỏ</Text>
+                      </TouchableOpacity>
                     </View>
                   </View>
-                  <View style={styles.appliedVoucherActions}>
-                    <TouchableOpacity onPress={() => setShowVoucherModal(true)}>
-                      <Text style={styles.changeVoucherLink}>Đổi mã</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={removeVoucher}>
-                      <Text style={styles.removeVoucherLink}>Gỡ</Text>
-                    </TouchableOpacity>
+                  <View style={{ gap: 2 }}>
+                    <Text style={styles.appliedVoucherSavings}>
+                      Tiết kiệm {formatVND(discountAmount)}
+                    </Text>
+                    <Text style={styles.appliedVoucherSub}>
+                      {appliedVoucher.discount_type === 'percent' || appliedVoucher.discountType === 'percent'
+                        ? `Giảm ${appliedVoucher.value}% trên giá trị đơn hàng`
+                        : `Giảm ${formatVND(appliedVoucher.value)}`}
+                    </Text>
                   </View>
                 </View>
               ) : (
@@ -745,7 +751,7 @@ export default function CheckoutScreen() {
         </View>
       )}
 
-﻿      {/* Address Edit Modal */}
+      {/* Address Edit Modal */}
       <Modal
         visible={showAddressModal}
         animationType="fade"
@@ -1002,7 +1008,7 @@ export default function CheckoutScreen() {
   );
 }
 
-﻿const styles = StyleSheet.create({
+const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#f8fafc',
@@ -1467,9 +1473,6 @@ export default function CheckoutScreen() {
     color: '#ffffff',
   },
   appliedVoucherContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     padding: 12,
     backgroundColor: '#fffdf5',
     borderWidth: 1,
@@ -1481,12 +1484,14 @@ export default function CheckoutScreen() {
     alignItems: 'center',
     gap: 10,
     flex: 1,
+    minWidth: 0,
   },
   appliedVoucherTag: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     backgroundColor: '#b78103',
     borderRadius: 6,
+    flexShrink: 0,
   },
   appliedVoucherCode: {
     fontSize: 12,
@@ -1506,6 +1511,7 @@ export default function CheckoutScreen() {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    flexShrink: 0,
   },
   changeVoucherLink: {
     fontSize: 12,
