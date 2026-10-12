@@ -142,23 +142,25 @@ export default function HomeScreen() {
         ) : (
           <>
             {/* KHỐI 1: SẢN PHẨM NỔI BẬT (LUÔN LUÔN HIỂN THỊ TRÊN TRANG CHỦ) */}
-            <View style={[styles.sectionHeader, isMobile && { paddingHorizontal: 14, marginBottom: 12 }]}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <IconSymbol name="sparkles" size={17} color="#A68B5B" />
-                <Text style={[styles.sectionTitle, isMobile && { fontSize: 18 }]}>Sản Phẩm Nổi Bật</Text>
-                <View style={styles.hotBadge}>
-                  <Text style={styles.hotBadgeText}>BÁN CHẠY</Text>
+            <View style={[styles.sectionHeader, isMobile && { paddingHorizontal: 14, marginBottom: 12, alignItems: 'center' }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, marginRight: 8 }}>
+                <IconSymbol name="sparkles" size={16} color="#A68B5B" />
+                <Text style={[styles.sectionTitle, isMobile && { fontSize: 16 }]} numberOfLines={1}>Sản Phẩm Nổi Bật</Text>
+                <View style={[styles.hotBadge, isMobile && { paddingHorizontal: 6, paddingVertical: 1.5 }]}>
+                  <Text style={[styles.hotBadgeText, isMobile && { fontSize: 8 }]}>BÁN CHẠY</Text>
                 </View>
               </View>
-              <TouchableOpacity style={styles.viewAllBtn} onPress={() => router.push('/products')}>
-                <Text style={styles.viewAllText}>Xem tất cả ({products.length})</Text>
-                <IconSymbol name="arrow.right" size={14} color="#717171" />
+              <TouchableOpacity style={[styles.viewAllBtn, { flexShrink: 0 }]} onPress={() => router.push('/products')}>
+                <Text style={[styles.viewAllText, isMobile && { fontSize: 11, letterSpacing: 0.2 }]}>
+                  {isMobile ? 'Xem tất cả' : `Xem tất cả (${products.length})`}
+                </Text>
+                <IconSymbol name="arrow.right" size={13} color="#717171" />
               </TouchableOpacity>
             </View>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.featuredContent, isMobile && { paddingHorizontal: 14, gap: 12, marginBottom: 24 }]}>
               {featuredProducts.map((prod) => (
-                <TouchableOpacity key={prod.id} style={[styles.featuredCard, isMobile && { width: 190 }]} onPress={() => router.push(`/products/${prod.id}`)}>
+                <TouchableOpacity key={prod.id} style={[styles.featuredCard, isMobile && { width: 180 }]} onPress={() => router.push(`/products/${prod.id}`)}>
                   <View style={styles.featuredImageContainer}>
                     <Image source={getImageSource(prod.image)} style={styles.featuredImage} contentFit="cover" />
                     <View style={styles.imageOverlay} />
@@ -180,16 +182,16 @@ export default function HomeScreen() {
                     </TouchableOpacity>
                   </View>
                   <Text style={styles.productName} numberOfLines={1}>{prod.name}</Text>
-                  <View style={styles.productPriceRow}>
+                  <View style={[styles.productPriceRow, isMobile && { flexWrap: 'wrap', rowGap: 2 }]}>
                     {(() => {
                       const origPrice = prod.originalPrice || prod.original_price || (prod.discount > 0 ? Math.round((prod.price / (1 - prod.discount / 100)) / 1000) * 1000 : null);
                       return (
-                        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
-                          <Text style={[styles.productPrice, prod.discount > 0 && styles.priceDiscounted]}>
+                        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4, flexWrap: 'wrap', flexShrink: 1 }}>
+                          <Text style={[styles.productPrice, prod.discount > 0 && styles.priceDiscounted, isMobile && { fontSize: 15 }]}>
                             {formatVND(prod.price)}
                           </Text>
                           {origPrice && origPrice > prod.price && (
-                            <Text style={styles.priceOriginalCrossed}>
+                            <Text style={[styles.priceOriginalCrossed, isMobile && { fontSize: 11 }]}>
                               {formatVND(origPrice)}
                             </Text>
                           )}
@@ -197,8 +199,8 @@ export default function HomeScreen() {
                       );
                     })()}
                     <View style={styles.ratingRow}>
-                      <IconSymbol name="star.fill" size={12} color="#A68B5B" />
-                      <Text style={styles.ratingText}>4.9</Text>
+                      <IconSymbol name="star.fill" size={11} color="#A68B5B" />
+                      <Text style={[styles.ratingText, isMobile && { fontSize: 12 }]}>4.9</Text>
                     </View>
                   </View>
                 </TouchableOpacity>
@@ -235,51 +237,51 @@ export default function HomeScreen() {
             </TouchableOpacity>
 
             {/* 3 THẺ CAM KẾT CHUẨN THƯƠNG HIỆU CÓ ICON TRÒN NỔI BẬT & NỀN PASTEL SANG TRỌNG */}
-            <View style={[styles.trustCardsRow, isMobile && { marginHorizontal: 14, marginBottom: 28, gap: 8 }]}>
-              <View style={[styles.trustCard, isMobile && { padding: 10 }]}>
+            <View style={[styles.trustCardsRow, isMobile && { marginHorizontal: 14, marginBottom: 24, gap: 6 }]}>
+              <View style={[styles.trustCard, isMobile && { paddingHorizontal: 6, paddingVertical: 10 }]}>
                 <View style={[styles.trustIconCircle, { backgroundColor: '#eff6ff' }]}>
                   <IconSymbol name="shippingbox" size={18} color="#1d4ed8" />
                 </View>
-                <Text style={[styles.trustCardTitle, isMobile && { fontSize: 11 }]} numberOfLines={1}>Freeship đơn 499k</Text>
-                <Text style={[styles.trustCardSubtitle, isMobile && { fontSize: 9 }]} numberOfLines={1}>Giao nhanh toàn quốc</Text>
+                <Text style={[styles.trustCardTitle, isMobile && { fontSize: 11 }]} numberOfLines={1}>Freeship 499k</Text>
+                <Text style={[styles.trustCardSubtitle, isMobile && { fontSize: 9.5 }]} numberOfLines={1}>Toàn quốc</Text>
               </View>
 
-              <View style={[styles.trustCard, isMobile && { padding: 10 }]}>
+              <View style={[styles.trustCard, isMobile && { paddingHorizontal: 6, paddingVertical: 10 }]}>
                 <View style={[styles.trustIconCircle, { backgroundColor: '#ecfdf5' }]}>
                   <IconSymbol name="arrow.2.squarepath" size={18} color="#059669" />
                 </View>
                 <Text style={[styles.trustCardTitle, isMobile && { fontSize: 11 }]} numberOfLines={1}>Đổi hàng 7 ngày</Text>
-                <Text style={[styles.trustCardSubtitle, isMobile && { fontSize: 9 }]} numberOfLines={1}>Đổi size tại nhà</Text>
+                <Text style={[styles.trustCardSubtitle, isMobile && { fontSize: 9.5 }]} numberOfLines={1}>Tại nhà</Text>
               </View>
 
-              <View style={[styles.trustCard, isMobile && { padding: 10 }]}>
+              <View style={[styles.trustCard, isMobile && { paddingHorizontal: 6, paddingVertical: 10 }]}>
                 <View style={[styles.trustIconCircle, { backgroundColor: '#fef3c7' }]}>
                   <IconSymbol name="checkmark.seal" size={18} color="#d97706" />
                 </View>
                 <Text style={[styles.trustCardTitle, isMobile && { fontSize: 11 }]} numberOfLines={1}>100% Chính hãng</Text>
-                <Text style={[styles.trustCardSubtitle, isMobile && { fontSize: 9 }]} numberOfLines={1}>Cam kết chất lượng</Text>
+                <Text style={[styles.trustCardSubtitle, isMobile && { fontSize: 9.5 }]} numberOfLines={1}>Cao cấp</Text>
               </View>
             </View>
 
             {/* KHỐI 3: GỢI Ý THỊNH HÀNH - CHỈ TUYỂN CHỌN 6-8 SẢN PHẨM ĐỂ TRANG CHỦ BẮT MẮT & TINH GỌN */}
-            <View style={[styles.sectionHeader, isMobile && { paddingHorizontal: 14, marginBottom: 12 }]}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <IconSymbol name="sparkles" size={17} color="#0f172a" />
-                <Text style={[styles.sectionTitle, isMobile && { fontSize: 18 }]}>
+            <View style={[styles.sectionHeader, isMobile && { paddingHorizontal: 14, marginBottom: 12, alignItems: 'center' }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
+                <IconSymbol name="sparkles" size={16} color="#0f172a" />
+                <Text style={[styles.sectionTitle, isMobile && { fontSize: 16 }]} numberOfLines={1}>
                   {activeCategory === 'Tất cả' ? 'Gợi Ý Thịnh Hành' : `Xu Hướng ${activeCategory}`}
                 </Text>
-                <View style={styles.trendBadge}>
-                  <Text style={styles.trendBadgeText}>TUYỂN CHỌN</Text>
+                <View style={[styles.trendBadge, isMobile && { paddingHorizontal: 5, paddingVertical: 2, flexShrink: 0 }]}>
+                  <Text style={[styles.trendBadgeText, isMobile && { fontSize: 8 }]}>TUYỂN CHỌN</Text>
                 </View>
               </View>
 
               <TouchableOpacity 
-                style={styles.viewAllBtn} 
+                style={[styles.viewAllBtn, { flexShrink: 0 }]} 
                 onPress={() => router.push(activeCategory === 'Tất cả' ? '/products' : { pathname: '/products', params: { category: activeCategory } })}
                 activeOpacity={0.7}
               >
-                <Text style={styles.viewAllText}>Xem tất cả ({filteredProducts.length})</Text>
-                <IconSymbol name="arrow.right" size={14} color="#717171" />
+                <Text style={[styles.viewAllText, isMobile && { fontSize: 11 }]}>Xem tất cả</Text>
+                <IconSymbol name="arrow.right" size={13} color="#717171" />
               </TouchableOpacity>
             </View>
 
@@ -475,6 +477,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 24,
+    paddingBottom: 110,
     maxWidth: 1280,
     alignSelf: 'center',
     width: '100%',
