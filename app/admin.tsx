@@ -109,6 +109,14 @@ export default function AdminScreen() {
   });
   const [isSubmittingImport, setIsSubmittingImport] = useState(false);
 
+  // Operations Alert & Action Center calculations
+  const pendingBankOrders = orders.filter(
+    (o) => o.payment_method === 'bank' && o.payment_status === 'paid_pending_verification'
+  );
+  const lowStockProducts = products.filter((p) => (Number(p.stock) || 0) <= 10);
+  const outOfStockProducts = products.filter((p) => (Number(p.stock) || 0) <= 0);
+  const totalPendingTasks = (returnStats.requested || 0) + pendingBankOrders.length + lowStockProducts.length;
+
   const generateBatchCode = () => {
     const seasons = ['XUAN', 'HE', 'THU', 'DONG', 'PRO'];
     const s = seasons[Math.floor(Math.random() * seasons.length)];
@@ -229,6 +237,24 @@ export default function AdminScreen() {
   const handleRefresh = () => {
     setRefreshing(true);
     fetchData();
+  };
+
+  const handleRejectBankPayment = async (orderId: number) => {
+    try {
+      const res = await fetch(`${API_URL}/api/orders/${orderId}/reject-bank-payment`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (data && data.success) {
+        showToast('Đã báo chưa nhận được tiền chuyển khoản');
+        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, payment_status: 'unpaid' } : o));
+      } else {
+        showToast(data.message || 'Không thể cập nhật');
+      }
+    } catch (e) {
+      showToast('Lỗi kết nối máy chủ');
+    }
   };
 
   // Auto Progression & Bulk Handlers
@@ -605,7 +631,9 @@ export default function AdminScreen() {
     return orders.filter((order) => {
       const matchesStatus =
         orderStatusFilter === 'ALL' ||
-        order.status?.toLowerCase() === orderStatusFilter.toLowerCase();
+        (orderStatusFilter === 'BANK_PENDING'
+          ? (order.payment_method === 'bank' && order.payment_status === 'paid_pending_verification')
+          : order.status?.toLowerCase() === orderStatusFilter.toLowerCase());
       const q = orderSearch.toLowerCase().trim();
       const matchesSearch =
         !q ||
@@ -716,7 +744,13 @@ export default function AdminScreen() {
   }, [returnTickets, returnStatusFilter, returnSearch]);
 
   const tabsList = [
-    { key: 'overview', label: 'Tổng quan', icon: 'square.grid.2x2' },
+    { 
+      key: 'overview', 
+      label: 'Tổng quan', 
+      icon: 'square.grid.2x2',
+      badge: totalPendingTasks > 0 ? `${totalPendingTasks}` : undefined,
+      badgeAlert: totalPendingTasks > 0,
+    },
     {
       key: 'orders',
       label: 'Đơn hàng',
@@ -815,44 +849,46 @@ export default function AdminScreen() {
 
       {/* Modern Luxury Header */}
       <View style={styles.header}>
-        <View style={styles.headerContent}>
+        <View style={[styles.headerContent, isMobile && { paddingHorizontal: 12, paddingTop: 10, paddingBottom: 10 }]}>
           {/* Left: Back + Brand */}
-          <View style={styles.headerLeft}>
+          <View style={[styles.headerLeft, isMobile && { gap: 8, flex: 1 }]}>
             <TouchableOpacity
-              style={styles.backBtn}
+              style={[styles.backBtn, isMobile && { width: 34, height: 34, borderRadius: 17 }]}
               onPress={() => router.push('/(tabs)/user')}
               activeOpacity={0.7}
             >
-              <IconSymbol name="chevron.left" size={18} color="#0f172a" />
+              <IconSymbol name="chevron.left" size={isMobile ? 16 : 18} color="#0f172a" />
             </TouchableOpacity>
-            <View>
-              <View style={styles.brandBadgeRow}>
-                <Text style={styles.headerBrand}>THỜI TRANG HD</Text>
-                <View style={styles.adminBadge}>
-                  <Text style={styles.adminBadgeText}>ADMIN PORTAL</Text>
+            <View style={{ flex: 1 }}>
+              <View style={[styles.brandBadgeRow, isMobile && { gap: 6 }]}>
+                <Text style={[styles.headerBrand, isMobile && { fontSize: 14 }]} numberOfLines={1}>THỜI TRANG HD</Text>
+                <View style={[styles.adminBadge, isMobile && { paddingHorizontal: 5, paddingVertical: 1.5 }]}>
+                  <Text style={[styles.adminBadgeText, isMobile && { fontSize: 8.5 }]}>ADMIN</Text>
                 </View>
               </View>
-              <Text style={styles.headerSub} numberOfLines={1}>
-                {isMobile ? 'Quản trị hệ thống' : 'Bảng điều khiển quản trị doanh nghiệp thời gian thực'}
-              </Text>
+              {!isMobile && (
+                <Text style={styles.headerSub} numberOfLines={1}>
+                  Bảng điều khiển quản trị doanh nghiệp thời gian thực
+                </Text>
+              )}
             </View>
           </View>
 
           {/* Right: Actions */}
-          <View style={styles.headerRight}>
+          <View style={[styles.headerRight, isMobile && { gap: 6 }]}>
             <TouchableOpacity
-              style={styles.storefrontBtn}
+              style={[styles.storefrontBtn, isMobile && { paddingHorizontal: 8, paddingVertical: 6, gap: 4 }]}
               onPress={() => router.push('/(tabs)')}
               activeOpacity={0.8}
             >
-              <IconSymbol name="bag" size={15} color="#0f172a" />
-              <Text style={styles.storefrontBtnText}>
-                {isMobile ? 'Cửa Hàng' : 'Xem Cửa Hàng'}
+              <IconSymbol name="bag" size={isMobile ? 14 : 15} color="#0f172a" />
+              <Text style={[styles.storefrontBtnText, isMobile && { fontSize: 11 }]}>
+                {isMobile ? 'Shop' : 'Xem Cửa Hàng'}
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.refreshBtn}
+              style={[styles.refreshBtn, isMobile && { paddingHorizontal: 8, paddingVertical: 6, gap: 4 }]}
               onPress={handleRefresh}
               activeOpacity={0.8}
             >
@@ -860,8 +896,8 @@ export default function AdminScreen() {
                 <ActivityIndicator size="small" color="#ffffff" />
               ) : (
                 <>
-                  <View style={styles.onlineDot} />
-                  <Text style={styles.refreshBtnText}>Đồng bộ</Text>
+                  <View style={[styles.onlineDot, isMobile && { width: 6, height: 6 }]} />
+                  <Text style={[styles.refreshBtnText, isMobile && { fontSize: 11 }]}>Đồng bộ</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -874,7 +910,7 @@ export default function AdminScreen() {
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.tabsScrollContent}
+              contentContainerStyle={[styles.tabsScrollContent, isMobile && { paddingHorizontal: 10, paddingVertical: 7, gap: 6 }]}
             >
               {tabsList.map((tab) => {
                 const isActive = activeTab === tab.key;
@@ -884,13 +920,14 @@ export default function AdminScreen() {
                     style={[
                       styles.tabItemPill,
                       isActive && styles.tabItemPillActive,
+                      isMobile && { paddingHorizontal: 10, paddingVertical: 6, gap: 5, borderRadius: 16 },
                     ]}
                     onPress={() => setActiveTab(tab.key as AdminTab)}
                     activeOpacity={0.75}
                   >
                     <IconSymbol
                       name={tab.icon as any}
-                      size={15}
+                      size={isMobile ? 13 : 15}
                       color={isActive ? '#ffffff' : '#64748b'}
                     />
                     <Text
@@ -898,6 +935,7 @@ export default function AdminScreen() {
                       style={[
                         styles.tabItemText,
                         isActive && styles.tabItemTextActive,
+                        isMobile && { fontSize: 12 },
                       ]}
                     >
                       {tab.label}
@@ -908,6 +946,7 @@ export default function AdminScreen() {
                           styles.tabBadgePill,
                           isActive && styles.tabBadgePillActive,
                           tab.badgeAlert && (isActive ? styles.tabBadgeAlertPillActive : styles.tabBadgeAlertPill),
+                          isMobile && { paddingHorizontal: 5, paddingVertical: 1, borderRadius: 10 },
                         ]}
                       >
                         <Text
@@ -915,6 +954,7 @@ export default function AdminScreen() {
                             styles.tabBadgeText,
                             isActive && styles.tabBadgeTextActive,
                             tab.badgeAlert && (isActive ? styles.tabBadgeAlertTextActive : styles.tabBadgeAlertText),
+                            isMobile && { fontSize: 10 },
                           ]}
                         >
                           {tab.badge}
@@ -947,94 +987,311 @@ export default function AdminScreen() {
           {activeTab === 'overview' && (
             <View style={styles.tabContent}>
               {/* 4 Clean Metric Cards */}
-              <View style={styles.metricsGrid}>
+              <View style={[styles.metricsGrid, isMobile && { gap: 8 }]}>
                 {/* Metric 1: Doanh Thu */}
-                <View style={[styles.metricCard, { borderTopColor: '#10b981' }]}>
+                <View style={[styles.metricCard, isMobile && { padding: 12, minWidth: '47%', borderRadius: 10 }, { borderTopColor: '#10b981' }]}>
                   <View style={styles.metricCardTop}>
-                    <Text style={styles.metricCardTitle}>TỔNG DOANH THU</Text>
-                    <View style={[styles.metricIconWrap, { backgroundColor: '#ecfdf5' }]}>
-                      <IconSymbol name="banknote" size={17} color="#059669" />
+                    <Text style={[styles.metricCardTitle, isMobile && { fontSize: 10 }]}>TỔNG DOANH THU</Text>
+                    <View style={[styles.metricIconWrap, isMobile && { width: 28, height: 28, borderRadius: 6 }, { backgroundColor: '#ecfdf5' }]}>
+                      <IconSymbol name="banknote" size={isMobile ? 15 : 17} color="#059669" />
                     </View>
                   </View>
-                  <Text style={styles.metricCardValue}>{formatVND(stats.totalRevenue)}</Text>
-                  <View style={styles.metricCardFooter}>
-                    <View style={styles.growthBadge}>
-                      <Text style={styles.growthText}>Hôm nay:</Text>
+                  <Text style={[styles.metricCardValue, isMobile && { fontSize: 17, marginBottom: 4 }]} numberOfLines={1} adjustsFontSizeToFit>{formatVND(stats.totalRevenue)}</Text>
+                  <View style={[styles.metricCardFooter, isMobile && { flexWrap: 'wrap', gap: 4 }]}>
+                    <View style={[styles.growthBadge, isMobile && { paddingHorizontal: 5, paddingVertical: 1.5 }]}>
+                      <Text style={[styles.growthText, isMobile && { fontSize: 9 }]}>Hôm nay:</Text>
                     </View>
-                    <Text style={styles.metricSubText}>
+                    <Text style={[styles.metricSubText, isMobile && { fontSize: 10 }]}>
                       +{formatVND(stats.todayRevenue)} ({stats.todayOrders || 0} đơn)
                     </Text>
                   </View>
                 </View>
 
                 {/* Metric 2: Đơn Hàng */}
-                <View style={[styles.metricCard, { borderTopColor: '#3b82f6' }]}>
+                <View style={[styles.metricCard, isMobile && { padding: 12, minWidth: '47%', borderRadius: 10 }, { borderTopColor: '#3b82f6' }]}>
                   <View style={styles.metricCardTop}>
-                    <Text style={styles.metricCardTitle}>TỔNG ĐƠN HÀNG</Text>
-                    <View style={[styles.metricIconWrap, { backgroundColor: '#eff6ff' }]}>
-                      <IconSymbol name="cube.box" size={17} color="#2563eb" />
+                    <Text style={[styles.metricCardTitle, isMobile && { fontSize: 10 }]}>TỔNG ĐƠN HÀNG</Text>
+                    <View style={[styles.metricIconWrap, isMobile && { width: 28, height: 28, borderRadius: 6 }, { backgroundColor: '#eff6ff' }]}>
+                      <IconSymbol name="cube.box" size={isMobile ? 15 : 17} color="#2563eb" />
                     </View>
                   </View>
-                  <Text style={styles.metricCardValue}>{stats.totalOrders} đơn</Text>
-                  <View style={styles.metricCardFooter}>
-                    <View style={[styles.growthBadge, { backgroundColor: '#fef3c7' }]}>
-                      <Text style={[styles.growthText, { color: '#b45309' }]}>
+                  <Text style={[styles.metricCardValue, isMobile && { fontSize: 17, marginBottom: 4 }]} numberOfLines={1}>{stats.totalOrders} đơn</Text>
+                  <View style={[styles.metricCardFooter, isMobile && { flexWrap: 'wrap', gap: 4 }]}>
+                    <View style={[styles.growthBadge, isMobile && { paddingHorizontal: 5, paddingVertical: 1.5 }, { backgroundColor: '#fef3c7' }]}>
+                      <Text style={[styles.growthText, isMobile && { fontSize: 9 }, { color: '#b45309' }]}>
                         {stats.pendingOrders} chờ duyệt
                       </Text>
                     </View>
-                    <Text style={styles.metricSubText}>
-                      {stats.processingOrders} đang giao &bull; {stats.completedOrders} xong
+                    <Text style={[styles.metricSubText, isMobile && { fontSize: 10 }]}>
+                      {stats.processingOrders} giao &bull; {stats.completedOrders} xong
                     </Text>
                   </View>
                 </View>
 
                 {/* Metric 3: Khách Hàng */}
-                <View style={[styles.metricCard, { borderTopColor: '#8b5cf6' }]}>
+                <View style={[styles.metricCard, isMobile && { padding: 12, minWidth: '47%', borderRadius: 10 }, { borderTopColor: '#8b5cf6' }]}>
                   <View style={styles.metricCardTop}>
-                    <Text style={styles.metricCardTitle}>KHÁCH HÀNG CRM</Text>
-                    <View style={[styles.metricIconWrap, { backgroundColor: '#f5f3ff' }]}>
-                      <IconSymbol name="person.fill" size={17} color="#7c3aed" />
+                    <Text style={[styles.metricCardTitle, isMobile && { fontSize: 10 }]}>KHÁCH HÀNG CRM</Text>
+                    <View style={[styles.metricIconWrap, isMobile && { width: 28, height: 28, borderRadius: 6 }, { backgroundColor: '#f5f3ff' }]}>
+                      <IconSymbol name="person.fill" size={isMobile ? 15 : 17} color="#7c3aed" />
                     </View>
                   </View>
-                  <Text style={styles.metricCardValue}>{stats.totalUsers} thành viên</Text>
+                  <Text style={[styles.metricCardValue, isMobile && { fontSize: 17, marginBottom: 4 }]} numberOfLines={1}>{stats.totalUsers} thành viên</Text>
                   <View style={styles.metricCardFooter}>
-                    <Text style={styles.metricSubText}>Người dùng đăng ký hệ thống</Text>
+                    <Text style={[styles.metricSubText, isMobile && { fontSize: 10 }]}>Người dùng đăng ký</Text>
                   </View>
                 </View>
 
                 {/* Metric 4: Sản Phẩm */}
-                <View style={[styles.metricCard, { borderTopColor: '#f59e0b' }]}>
+                <View style={[styles.metricCard, isMobile && { padding: 12, minWidth: '47%', borderRadius: 10 }, { borderTopColor: '#f59e0b' }]}>
                   <View style={styles.metricCardTop}>
-                    <Text style={styles.metricCardTitle}>KHO HÀNG SẢN PHẨM</Text>
-                    <View style={[styles.metricIconWrap, { backgroundColor: '#fffbeb' }]}>
-                      <IconSymbol name="bag" size={17} color="#d97706" />
+                    <Text style={[styles.metricCardTitle, isMobile && { fontSize: 10 }]}>KHO SẢN PHẨM</Text>
+                    <View style={[styles.metricIconWrap, isMobile && { width: 28, height: 28, borderRadius: 6 }, { backgroundColor: '#fffbeb' }]}>
+                      <IconSymbol name="bag" size={isMobile ? 15 : 17} color="#d97706" />
                     </View>
                   </View>
-                  <Text style={styles.metricCardValue}>{stats.totalProducts} mặt hàng</Text>
+                  <Text style={[styles.metricCardValue, isMobile && { fontSize: 17, marginBottom: 4 }]} numberOfLines={1}>{stats.totalProducts} mặt hàng</Text>
                   <View style={styles.metricCardFooter}>
-                    <Text style={styles.metricSubText}>
+                    <Text style={[styles.metricSubText, isMobile && { fontSize: 10 }]}>
                       {stats.categoryStats?.length || 6} phân loại danh mục
                     </Text>
                   </View>
                 </View>
               </View>
 
+              {/* BẢNG CÔNG VIỆC CẦN ADMIN XỬ LÝ (CARD CONTAINER ĐỒNG BỘ 100%) */}
+              <View style={[styles.cardContainer, { width: '100%', marginBottom: 16 }, isMobile && { padding: 12 }]}>
+                <View style={[styles.cardHeader, isMobile && { flexWrap: 'wrap', gap: 6 }]}>
+                  <View style={{ flex: 1, minWidth: 200, marginRight: 8 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <Text style={[styles.cardTitle, isMobile && { fontSize: 14 }]}>Công Việc Cần Admin Giải Quyết</Text>
+                      {totalPendingTasks > 0 ? (
+                        <View style={{ backgroundColor: '#fee2e2', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 10 }}>
+                          <Text style={{ fontSize: 10, fontWeight: '800', color: '#b91c1c' }}>{totalPendingTasks} việc</Text>
+                        </View>
+                      ) : (
+                        <View style={{ backgroundColor: '#ecfdf5', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 10 }}>
+                          <Text style={{ fontSize: 10, fontWeight: '800', color: '#047857' }}>✓ Đã xong</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={[styles.cardSubtitle, isMobile && { fontSize: 11 }]}>Các tác vụ phát sinh cần phê duyệt và kiểm tra gấp</Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (returnStats.requested > 0) {
+                        setActiveTab('returns');
+                        setReturnStatusFilter('Requested');
+                      } else if (pendingBankOrders.length > 0) {
+                        setActiveTab('orders');
+                        setOrderStatusFilter('Pending');
+                      } else {
+                        setActiveTab('inventory');
+                      }
+                    }}
+                    activeOpacity={0.7}
+                    style={{ flexShrink: 0 }}
+                  >
+                    <Text style={styles.viewAllLink}>Xử lý ngay &rarr;</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Danh sách các công việc cần làm */}
+                <View style={styles.recentOrdersList}>
+                  {/* Task 1: Đổi / Trả hàng */}
+                  <TouchableOpacity
+                    style={[
+                      styles.recentOrderItem,
+                      returnStats.requested > 0 && { backgroundColor: '#fffbeb', borderColor: '#fde68a' }
+                    ]}
+                    onPress={() => {
+                      setActiveTab('returns');
+                      setReturnStatusFilter('Requested');
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10, minWidth: 0, marginRight: 8 }}>
+                      <View style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: 8,
+                        backgroundColor: returnStats.requested > 0 ? '#fef3c7' : '#f1f5f9',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        flexShrink: 0
+                      }}>
+                        <IconSymbol name="arrow.2.squarepath" size={17} color={returnStats.requested > 0 ? '#d97706' : '#64748b'} />
+                      </View>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <Text style={[styles.recentOrderCode, isMobile && { fontSize: 13, flexShrink: 1 }]} numberOfLines={1}>
+                            Yêu cầu đổi / trả hàng
+                          </Text>
+                          {returnStats.requested > 0 && (
+                            <View style={{ backgroundColor: '#fef3c7', paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, flexShrink: 0 }}>
+                              <Text style={{ fontSize: 9, fontWeight: '800', color: '#b45309' }}>CẦN DUYỆT</Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text style={[styles.recentOrderCustomer, isMobile && { fontSize: 11 }]} numberOfLines={1}>
+                          {returnStats.requested > 0
+                            ? `${returnStats.requested} yêu cầu đổi size / trả hàng từ khách chờ duyệt`
+                            : 'Đã hoàn tất, không có yêu cầu tồn đọng'}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={{ alignItems: 'flex-end', flexShrink: 0 }}>
+                      <View style={[
+                        styles.badgePill,
+                        {
+                          backgroundColor: returnStats.requested > 0 ? '#b45309' : '#0f172a',
+                          borderColor: returnStats.requested > 0 ? '#b45309' : '#0f172a',
+                          paddingHorizontal: 10,
+                          paddingVertical: 5
+                        }
+                      ]}>
+                        <Text style={[styles.badgePillText, { color: '#ffffff', fontWeight: '700', fontSize: 11 }]}>
+                          {returnStats.requested > 0 ? `Duyệt (${returnStats.requested})` : 'Xem'}
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* Task 2: Thanh toán VietQR */}
+                  <TouchableOpacity
+                    style={[
+                      styles.recentOrderItem,
+                      pendingBankOrders.length > 0 && { backgroundColor: '#faf5ff', borderColor: '#ddd6fe' }
+                    ]}
+                    onPress={() => {
+                      setActiveTab('orders');
+                      setOrderStatusFilter('BANK_PENDING');
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10, minWidth: 0, marginRight: 8 }}>
+                      <View style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: 8,
+                        backgroundColor: pendingBankOrders.length > 0 ? '#ede9fe' : '#f1f5f9',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        flexShrink: 0
+                      }}>
+                        <IconSymbol name="creditcard" size={17} color={pendingBankOrders.length > 0 ? '#7c3aed' : '#64748b'} />
+                      </View>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <Text style={[styles.recentOrderCode, isMobile && { fontSize: 13, flexShrink: 1 }]} numberOfLines={1}>
+                            Thanh toán VietQR chờ duyệt
+                          </Text>
+                          {pendingBankOrders.length > 0 && (
+                            <View style={{ backgroundColor: '#ede9fe', paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, flexShrink: 0 }}>
+                              <Text style={{ fontSize: 9, fontWeight: '800', color: '#6d28d9' }}>CHỜ TIỀN</Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text style={[styles.recentOrderCustomer, isMobile && { fontSize: 11 }]} numberOfLines={1}>
+                          {pendingBankOrders.length > 0
+                            ? `${pendingBankOrders.length} đơn khách báo đã CK, cần đối soát ngân hàng`
+                            : 'Tất cả đơn chuyển khoản đều đã đối soát xong'}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={{ alignItems: 'flex-end', flexShrink: 0 }}>
+                      <View style={[
+                        styles.badgePill,
+                        {
+                          backgroundColor: pendingBankOrders.length > 0 ? '#6d28d9' : '#0f172a',
+                          borderColor: pendingBankOrders.length > 0 ? '#6d28d9' : '#0f172a',
+                          paddingHorizontal: 10,
+                          paddingVertical: 5
+                        }
+                      ]}>
+                        <Text style={[styles.badgePillText, { color: '#ffffff', fontWeight: '700', fontSize: 11 }]}>
+                          {pendingBankOrders.length > 0 ? `Duyệt (${pendingBankOrders.length})` : 'Xem'}
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* Task 3: Cảnh báo tồn kho */}
+                  <TouchableOpacity
+                    style={[
+                      styles.recentOrderItem,
+                      lowStockProducts.length > 0 && { backgroundColor: '#fff1f2', borderColor: '#fecdd3' }
+                    ]}
+                    onPress={() => {
+                      setActiveTab('inventory');
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10, minWidth: 0, marginRight: 8 }}>
+                      <View style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: 8,
+                        backgroundColor: lowStockProducts.length > 0 ? '#fee2e2' : '#f1f5f9',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        flexShrink: 0
+                      }}>
+                        <IconSymbol name="exclamationmark.circle.fill" size={17} color={lowStockProducts.length > 0 ? '#e11d48' : '#64748b'} />
+                      </View>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <Text style={[styles.recentOrderCode, isMobile && { fontSize: 13, flexShrink: 1 }]} numberOfLines={1}>
+                            Cảnh báo tồn kho an toàn
+                          </Text>
+                          {lowStockProducts.length > 0 && (
+                            <View style={{ backgroundColor: '#fee2e2', paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, flexShrink: 0 }}>
+                              <Text style={{ fontSize: 9, fontWeight: '800', color: '#be123c' }}>SẮP HẾT HÀNG</Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text style={[styles.recentOrderCustomer, isMobile && { fontSize: 11 }]} numberOfLines={1}>
+                          {lowStockProducts.length > 0
+                            ? `${lowStockProducts.length} sản phẩm còn ≤ 10 chiếc (${outOfStockProducts.length} SP hết hàng)`
+                            : 'Tồn kho ổn định, không có sản phẩm thiếu hụt'}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={{ alignItems: 'flex-end', flexShrink: 0 }}>
+                      <View style={[
+                        styles.badgePill,
+                        {
+                          backgroundColor: lowStockProducts.length > 0 ? '#be123c' : '#0f172a',
+                          borderColor: lowStockProducts.length > 0 ? '#be123c' : '#0f172a',
+                          paddingHorizontal: 10,
+                          paddingVertical: 5
+                        }
+                      ]}>
+                        <Text style={[styles.badgePillText, { color: '#ffffff', fontWeight: '700', fontSize: 11 }]}>
+                          {lowStockProducts.length > 0 ? 'Nhập kho' : 'Xem kho'}
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
               {/* 7-DAY REVENUE BAR CHART & PIPELINE SECTION */}
               <View style={[styles.analyticsRow, isDesktop && styles.analyticsRowDesktop]}>
                 {/* 7-Day Interactive Bar Chart */}
-                <View style={[styles.cardContainer, isDesktop ? { flex: 1.6 } : { width: '100%' }]}>
-                  <View style={styles.cardHeader}>
+                <View style={[styles.cardContainer, isDesktop ? { flex: 1.6 } : { width: '100%' }, isMobile && { padding: 12 }]}>
+                  <View style={[styles.cardHeader, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 6 }]}>
                     <View>
-                      <Text style={styles.cardTitle}>Biểu Đồ Doanh Thu 7 Ngày Gần Nhất</Text>
-                      <Text style={styles.cardSubtitle}>Doanh số phát sinh thực tế (VNĐ)</Text>
+                      <Text style={[styles.cardTitle, isMobile && { fontSize: 14 }]}>Biểu Đồ Doanh Thu 7 Ngày</Text>
+                      <Text style={[styles.cardSubtitle, isMobile && { fontSize: 11 }]}>Doanh số phát sinh thực tế (VNĐ)</Text>
                     </View>
-                    <View style={styles.chartLegend}>
+                    <View style={[styles.chartLegend, isMobile && { alignSelf: 'flex-start' }]}>
                       <View style={styles.legendDot} />
-                      <Text style={styles.legendText}>Doanh thu / ngày</Text>
+                      <Text style={[styles.legendText, isMobile && { fontSize: 10.5 }]}>Doanh thu / ngày</Text>
                     </View>
                   </View>
 
-                  <View style={styles.chartWrapper}>
+                  <View style={[styles.chartWrapper, isMobile && { height: 160 }]}>
                     <View style={styles.barsContainer}>
                       {stats.dailyRevenue && stats.dailyRevenue.length > 0 ? (
                         stats.dailyRevenue.map((item: any, idx: number) => {
@@ -1043,10 +1300,10 @@ export default function AdminScreen() {
                           const isToday = idx === stats.dailyRevenue.length - 1;
                           return (
                             <View key={item.date || idx} style={styles.barCol}>
-                              <Text style={styles.barValText}>
+                              <Text style={[styles.barValText, isMobile && { fontSize: 8.5 }]}>
                                 {rev > 0 ? `${Math.round(rev / 1000)}k` : '0'}
                               </Text>
-                              <View style={styles.barTrack}>
+                              <View style={[styles.barTrack, isMobile && { width: '48%', height: 100 }]}>
                                 <View
                                   style={[
                                     styles.barFill,
@@ -1057,7 +1314,7 @@ export default function AdminScreen() {
                                   ]}
                                 />
                               </View>
-                              <Text style={[styles.barLabel, isToday && styles.barLabelToday]}>
+                              <Text style={[styles.barLabel, isToday && styles.barLabelToday, isMobile && { fontSize: 9.5 }]}>
                                 {item.label}
                               </Text>
                               {isToday && <View style={styles.todayIndicatorDot} />}
@@ -1379,7 +1636,7 @@ export default function AdminScreen() {
                     return (
                       <TouchableOpacity
                         key={chip.key}
-                        style={[styles.filterChip, isSelected && styles.filterChipActive]}
+                        style={[styles.filterChip, isSelected && styles.filterChipActive, chip.key === 'BANK_PENDING' && !isSelected && pendingBankOrders.length > 0 && { backgroundColor: '#faf5ff', borderColor: '#ddd6fe' }]}
                         onPress={() => setOrderStatusFilter(chip.key)}
                         activeOpacity={0.8}
                       >
@@ -1429,7 +1686,7 @@ export default function AdminScreen() {
                   return (
                     <View key={order.id} style={styles.orderCard}>
                       {/* Card Header */}
-                      <View style={styles.orderCardHeader}>
+                      <View style={[styles.orderCardHeader, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 8 }]}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                           <Text style={styles.orderCardCode}>#{order.order_code}</Text>
                           {order.return_status === 'Requested' && (
@@ -1447,6 +1704,22 @@ export default function AdminScreen() {
                               {b.label}
                             </Text>
                           </View>
+                          {order.payment_method === 'bank' && order.payment_status === 'paid_pending_verification' && (
+                            <View style={{ backgroundColor: '#f5f3ff', borderWidth: 1, borderColor: '#c4b5fd', paddingHorizontal: 7, paddingVertical: 2.5, borderRadius: 5, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#7c3aed' }} />
+                              <Text style={{ fontSize: 10, fontWeight: '800', color: '#6d28d9' }}>💳 KHÁCH BÁO ĐÃ CK</Text>
+                            </View>
+                          )}
+                          {order.payment_method === 'bank' && (!order.payment_status || order.payment_status === 'pending') && order.status === 'Pending' && (
+                            <View style={{ backgroundColor: '#fff7ed', borderWidth: 1, borderColor: '#fed7aa', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 }}>
+                              <Text style={{ fontSize: 10, fontWeight: '700', color: '#c2410c' }}>⏳ CHỜ CK</Text>
+                            </View>
+                          )}
+                          {order.payment_status === 'paid' && (
+                            <View style={{ backgroundColor: '#ecfdf5', borderWidth: 1, borderColor: '#a7f3d0', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 }}>
+                              <Text style={{ fontSize: 10, fontWeight: '700', color: '#047857' }}>✓ ĐÃ THANH TOÁN</Text>
+                            </View>
+                          )}
                         </View>
                         <Text style={styles.orderCardDate}>
                           {order.created_at
@@ -1505,7 +1778,7 @@ export default function AdminScreen() {
                       )}
 
                       {/* Total and Payment */}
-                      <View style={styles.orderTotalRow}>
+                      <View style={[styles.orderTotalRow, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 8 }]}>
                         <View style={styles.paymentMethodPill}>
                           <IconSymbol name="creditcard" size={14} color="#475569" />
                           <Text style={styles.paymentMethodText}>
@@ -1523,7 +1796,7 @@ export default function AdminScreen() {
                       </View>
 
                       {/* Card Actions */}
-                      <View style={styles.orderActionsRow}>
+                      <View style={[styles.orderActionsRow, isMobile && { flexDirection: 'column', alignItems: 'stretch', gap: 8 }]}>
                         <TouchableOpacity
                           style={styles.detailBtn}
                           onPress={() => setSelectedOrder(order)}
@@ -1533,18 +1806,43 @@ export default function AdminScreen() {
                           <Text style={styles.detailBtnText}>Chi tiết & Timeline</Text>
                         </TouchableOpacity>
 
-                        <View style={styles.actionButtonGroup}>
+                        <View style={[styles.actionButtonGroup, isMobile && { flexDirection: 'column', alignItems: 'stretch', gap: 6 }]}>
                           {isUpdating ? (
                             <ActivityIndicator size="small" color="#0f172a" />
                           ) : (
                             <>
                               {order.status === 'Pending' && (
-                                <TouchableOpacity
-                                  style={[styles.statusActionBtn, styles.approveBtn]}
-                                  onPress={() => handleUpdateOrderStatus(order.id, 'Processing')}
-                                >
-                                  <Text style={styles.approveBtnText}>Duyệt giao</Text>
-                                </TouchableOpacity>
+                                <>
+                                  {order.payment_method === 'bank' && order.payment_status === 'paid_pending_verification' ? (
+                                    <>
+                                      <TouchableOpacity
+                                        style={[styles.statusActionBtn, { backgroundColor: '#15803d', borderColor: '#16a34a' }]}
+                                        onPress={() => handleUpdateOrderStatus(order.id, 'Processing')}
+                                      >
+                                        <Text style={[styles.approveBtnText, { color: '#ffffff', fontWeight: '800' }]}>
+                                          ✓ Xác nhận tiền & Duyệt đơn
+                                        </Text>
+                                      </TouchableOpacity>
+                                      <TouchableOpacity
+                                        style={[styles.statusActionBtn, { backgroundColor: '#fef2f2', borderColor: '#fecaca' }]}
+                                        onPress={() => handleRejectBankPayment(order.id)}
+                                      >
+                                        <Text style={{ color: '#dc2626', fontSize: 11, fontWeight: '700' }}>
+                                          ✕ Chưa nhận tiền
+                                        </Text>
+                                      </TouchableOpacity>
+                                    </>
+                                  ) : (
+                                    <TouchableOpacity
+                                      style={[styles.statusActionBtn, styles.approveBtn]}
+                                      onPress={() => handleUpdateOrderStatus(order.id, 'Processing')}
+                                    >
+                                      <Text style={styles.approveBtnText}>
+                                        {order.payment_method === 'bank' ? 'Duyệt đơn (Chờ CK)' : 'Duyệt giao'}
+                                      </Text>
+                                    </TouchableOpacity>
+                                  )}
+                                </>
                               )}
 
                               {order.status === 'Processing' && (
@@ -1689,7 +1987,7 @@ export default function AdminScreen() {
                   return (
                     <View key={ticket.id} style={styles.returnTicketCard}>
                       {/* Ticket Header */}
-                      <View style={styles.returnTicketHeader}>
+                      <View style={[styles.returnTicketHeader, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 8 }]}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                           <View style={styles.ticketBadgeWrap}>
                             <Text style={styles.ticketCode}>#{ticket.order_code}</Text>
@@ -1727,7 +2025,7 @@ export default function AdminScreen() {
                       </View>
 
                       {/* Customer Row */}
-                      <View style={styles.returnCustomerRow}>
+                      <View style={[styles.returnCustomerRow, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 6 }]}>
                         <View style={{ flex: 1 }}>
                           <Text style={styles.returnCustomerName}>
                             Khách hàng: <Text style={{ fontWeight: '700', color: '#0f172a' }}>{ticket.customer_name || ticket.user_name || 'Khách vãng lai'}</Text>
@@ -1837,11 +2135,11 @@ export default function AdminScreen() {
                       </View>
 
                       {/* Admin Actions */}
-                      <View style={styles.returnActionBar}>
+                      <View style={[styles.returnActionBar, isMobile && { flexDirection: 'column', gap: 8 }]}>
                         {isPending ? (
                           <>
                             <TouchableOpacity
-                              style={[styles.btnActionReturn, styles.btnRejectReturn]}
+                              style={[styles.btnActionReturn, styles.btnRejectReturn, isMobile && { width: '100%', justifyContent: 'center' }]}
                               onPress={() => handleUpdateReturnStatus(ticket.id, 'Rejected')}
                               disabled={isUpdatingThis}
                               activeOpacity={0.8}
@@ -1851,7 +2149,7 @@ export default function AdminScreen() {
                             </TouchableOpacity>
 
                             <TouchableOpacity
-                              style={[styles.btnActionReturn, styles.btnApproveReturn]}
+                              style={[styles.btnActionReturn, styles.btnApproveReturn, isMobile && { width: '100%', justifyContent: 'center' }]}
                               onPress={() => handleUpdateReturnStatus(ticket.id, 'Approved')}
                               disabled={isUpdatingThis}
                               activeOpacity={0.8}
@@ -1902,39 +2200,41 @@ export default function AdminScreen() {
             <View style={styles.tabContent}>
               {/* Product Header & Action */}
               <View style={styles.controlsCard}>
-                <View style={styles.productTopControls}>
-                  <View style={[styles.searchBar, { flex: 1 }]}>
+                <View style={[styles.productTopControls, isMobile && { flexDirection: 'column', alignItems: 'stretch' }]}>
+                  <View style={[styles.searchBar, isMobile ? { width: '100%' } : { flex: 1, minWidth: 220 }]}>
                     <IconSymbol name="magnifyingglass" size={17} color="#94a3b8" />
                     <TextInput
                       style={styles.searchInput}
-                      placeholder="Tìm sản phẩm theo tên, mã SKU..."
+                      placeholder="Tìm sản phẩm theo tên, SKU..."
                       value={productSearch}
                       onChangeText={setProductSearch}
                       placeholderTextColor="#94a3b8"
                     />
                   </View>
-                  <TouchableOpacity
-                    style={[styles.addProductBtn, { backgroundColor: '#15803d', marginRight: 10 }]}
-                    onPress={() => {
-                      if (products.length > 0) {
-                        handleOpenImportModal(products[0]);
-                      } else {
-                        showToast('Chưa có sản phẩm nào để lập phiếu nhập kho');
-                      }
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <IconSymbol name="cube.box" size={15} color="#ffffff" />
-                    <Text style={styles.addProductBtnText}>📦 Lập Phiếu Nhập Kho</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.addProductBtn}
-                    onPress={handleOpenAddProduct}
-                    activeOpacity={0.8}
-                  >
-                    <IconSymbol name="plus" size={15} color="#ffffff" />
-                    <Text style={styles.addProductBtnText}>+ Thêm Sản Phẩm</Text>
-                  </TouchableOpacity>
+                  <View style={[styles.productActionButtonsRow, isMobile && { width: '100%' }]}>
+                    <TouchableOpacity
+                      style={[styles.addProductBtn, { backgroundColor: '#15803d', flex: 1, justifyContent: 'center' }]}
+                      onPress={() => {
+                        if (products.length > 0) {
+                          handleOpenImportModal(products[0]);
+                        } else {
+                          showToast('Chưa có sản phẩm nào để lập phiếu nhập kho');
+                        }
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <IconSymbol name="cube.box" size={15} color="#ffffff" />
+                      <Text style={styles.addProductBtnText}>Nhập Kho</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.addProductBtn, { flex: 1, justifyContent: 'center' }]}
+                      onPress={handleOpenAddProduct}
+                      activeOpacity={0.8}
+                    >
+                      <IconSymbol name="plus" size={15} color="#ffffff" />
+                      <Text style={styles.addProductBtnText}>Thêm Mới</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
                 {/* Category Pills */}
@@ -2014,41 +2314,45 @@ export default function AdminScreen() {
                       </View>
 
                       <View style={styles.productActionsRow}>
-                        <TouchableOpacity
-                          style={styles.variantProdBtn}
-                          onPress={() => setSelectedVariantProduct(prod)}
-                          activeOpacity={0.8}
-                        >
-                          <IconSymbol name="slider.horizontal.3" size={12} color="#4338ca" />
-                          <Text style={styles.variantProdBtnText}>Size/Màu</Text>
-                        </TouchableOpacity>
+                        <View style={{ flexDirection: 'row', gap: 6, flex: 1, minWidth: isMobile ? '100%' : 150 }}>
+                          <TouchableOpacity
+                            style={[styles.variantProdBtn, { flex: 1, justifyContent: 'center' }]}
+                            onPress={() => setSelectedVariantProduct(prod)}
+                            activeOpacity={0.8}
+                          >
+                            <IconSymbol name="slider.horizontal.3" size={12} color="#4338ca" />
+                            <Text style={styles.variantProdBtnText}>Size/Màu</Text>
+                          </TouchableOpacity>
 
-                        <TouchableOpacity
-                          style={styles.importProdBtn}
-                          onPress={() => handleOpenImportModal(prod)}
-                          activeOpacity={0.8}
-                        >
-                          <IconSymbol name="plus" size={12} color="#15803d" />
-                          <Text style={styles.importProdBtnText}>Nhập kho</Text>
-                        </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.importProdBtn, { flex: 1, justifyContent: 'center' }]}
+                            onPress={() => handleOpenImportModal(prod)}
+                            activeOpacity={0.8}
+                          >
+                            <IconSymbol name="plus" size={12} color="#15803d" />
+                            <Text style={styles.importProdBtnText}>Nhập kho</Text>
+                          </TouchableOpacity>
+                        </View>
 
-                        <TouchableOpacity
-                          style={styles.editProdBtn}
-                          onPress={() => handleOpenEditProduct(prod)}
-                          activeOpacity={0.8}
-                        >
-                          <IconSymbol name="slider.horizontal.3" size={13} color="#0284c7" />
-                          <Text style={styles.editProdBtnText}>Sửa</Text>
-                        </TouchableOpacity>
+                        <View style={{ flexDirection: 'row', gap: 6, flex: 1, minWidth: isMobile ? '100%' : 130 }}>
+                          <TouchableOpacity
+                            style={[styles.editProdBtn, { flex: 1, justifyContent: 'center' }]}
+                            onPress={() => handleOpenEditProduct(prod)}
+                            activeOpacity={0.8}
+                          >
+                            <IconSymbol name="slider.horizontal.3" size={13} color="#0284c7" />
+                            <Text style={styles.editProdBtnText}>Sửa</Text>
+                          </TouchableOpacity>
 
-                        <TouchableOpacity
-                          style={styles.deleteProdBtn}
-                          onPress={() => handleDeleteProduct(prod.id, prod.name)}
-                          activeOpacity={0.8}
-                        >
-                          <IconSymbol name="trash" size={13} color="#dc2626" />
-                          <Text style={styles.deleteProdBtnText}>Xóa</Text>
-                        </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.deleteProdBtn, { flex: 1, justifyContent: 'center' }]}
+                            onPress={() => handleDeleteProduct(prod.id, prod.name)}
+                            activeOpacity={0.8}
+                          >
+                            <IconSymbol name="trash" size={13} color="#dc2626" />
+                            <Text style={styles.deleteProdBtnText}>Xóa</Text>
+                          </TouchableOpacity>
+                        </View>
                       </View>
                     </View>
                   </View>
@@ -2061,20 +2365,20 @@ export default function AdminScreen() {
           {activeTab === 'inventory' && (
             <View style={styles.tabContent}>
               {/* Header card */}
-              <View style={styles.inventoryHeaderCard}>
+              <View style={[styles.inventoryHeaderCard, isMobile && { flexDirection: 'column', alignItems: 'stretch', padding: 14, gap: 10 }]}>
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                     <View style={styles.inventoryIconWrap}>
                       <IconSymbol name="cube.box" size={18} color="#15803d" />
                     </View>
-                    <Text style={styles.cardTitle}>QUẢN LÝ NHẬP KHO & LÔ HÀNG (INBOUND QC)</Text>
+                    <Text style={[styles.cardTitle, isMobile && { fontSize: 14 }]}>QUẢN LÝ NHẬP KHO & LÔ HÀNG (INBOUND QC)</Text>
                   </View>
-                  <Text style={styles.cardSubtitle}>
+                  <Text style={[styles.cardSubtitle, isMobile && { fontSize: 11 }]}>
                     Tiêu chuẩn may mặc công nghiệp &ldquo;100 cái như 100&rdquo; • Giám sát phiếu nhập theo Lô SX (Batch No) & Kiểm định xuất xưởng
                   </Text>
                 </View>
                 <TouchableOpacity
-                  style={[styles.addProductBtn, { backgroundColor: '#15803d' }]}
+                  style={[styles.addProductBtn, { backgroundColor: '#15803d' }, isMobile && { width: '100%', justifyContent: 'center' }]}
                   onPress={() => {
                     if (products.length > 0) {
                       handleOpenImportModal(products[0]);
@@ -2090,30 +2394,130 @@ export default function AdminScreen() {
               </View>
 
               {/* 4 Inbound Metric Cards */}
-              <View style={styles.metricsGrid}>
-                <View style={[styles.metricCard, { borderTopColor: '#15803d' }]}>
-                  <Text style={styles.metricLabel}>TỔNG SỐ LÔ NHẬP</Text>
-                  <Text style={styles.metricValue}>{stockImports.length} lô</Text>
-                  <Text style={styles.metricHint}>Đã ghi nhận vào kho hệ thống</Text>
+              <View style={[styles.metricsGrid, isMobile && { gap: 8 }]}>
+                <View style={[styles.metricCard, isMobile && { padding: 10, minWidth: '47%', borderRadius: 10 }, { borderTopColor: '#15803d' }]}>
+                  <Text style={[styles.metricLabel, isMobile && { fontSize: 10 }]}>TỔNG SỐ LÔ NHẬP</Text>
+                  <Text style={[styles.metricValue, isMobile && { fontSize: 16, marginBottom: 2 }]}>{stockImports.length} lô</Text>
+                  <Text style={[styles.metricHint, isMobile && { fontSize: 10 }]}>Đã ghi nhận vào kho</Text>
                 </View>
-                <View style={[styles.metricCard, { borderTopColor: '#0284c7' }]}>
-                  <Text style={styles.metricLabel}>TỔNG SẢN PHẨM NHẬP</Text>
-                  <Text style={styles.metricValue}>
+                <View style={[styles.metricCard, isMobile && { padding: 10, minWidth: '47%', borderRadius: 10 }, { borderTopColor: '#0284c7' }]}>
+                  <Text style={[styles.metricLabel, isMobile && { fontSize: 10 }]}>TỔNG SẢN PHẨM NHẬP</Text>
+                  <Text style={[styles.metricValue, isMobile && { fontSize: 16, marginBottom: 2 }]}>
                     {stockImports.reduce((acc, c) => acc + (Number(c.quantity) || 0), 0)} cái
                   </Text>
-                  <Text style={styles.metricHint}>Cộng dồn vào tồn kho bán lẻ</Text>
+                  <Text style={[styles.metricHint, isMobile && { fontSize: 10 }]}>Cộng dồn tồn kho bán lẻ</Text>
                 </View>
-                <View style={[styles.metricCard, { borderTopColor: '#8b5cf6' }]}>
-                  <Text style={styles.metricLabel}>TỔNG GIÁ VỐN NHẬP</Text>
-                  <Text style={styles.metricValue}>
+                <View style={[styles.metricCard, isMobile && { padding: 10, minWidth: '47%', borderRadius: 10 }, { borderTopColor: '#8b5cf6' }]}>
+                  <Text style={[styles.metricLabel, isMobile && { fontSize: 10 }]}>TỔNG GIÁ VỐN NHẬP</Text>
+                  <Text style={[styles.metricValue, isMobile && { fontSize: 16, marginBottom: 2 }]} numberOfLines={1} adjustsFontSizeToFit>
                     {formatVND(stockImports.reduce((acc, c) => acc + (Number(c.quantity) * Number(c.cost_price) || 0), 0))}
                   </Text>
-                  <Text style={styles.metricHint}>Chi phí vốn lô hàng SX</Text>
+                  <Text style={[styles.metricHint, isMobile && { fontSize: 10 }]}>Chi phí vốn lô SX</Text>
                 </View>
-                <View style={[styles.metricCard, { borderTopColor: '#f59e0b' }]}>
-                  <Text style={styles.metricLabel}>ĐẠT CHUẨN KIỂM ĐỊNH QC</Text>
-                  <Text style={[styles.metricValue, { color: '#15803d' }]}>100%</Text>
-                  <Text style={styles.metricHint}>Đường may, cúc bấm, phom dáng</Text>
+                <View style={[styles.metricCard, isMobile && { padding: 10, minWidth: '47%', borderRadius: 10 }, { borderTopColor: '#f59e0b' }]}>
+                  <Text style={[styles.metricLabel, isMobile && { fontSize: 10 }]}>ĐẠT CHUẨN KIỂM ĐỊNH QC</Text>
+                  <Text style={[styles.metricValue, isMobile && { fontSize: 16, marginBottom: 2 }, { color: '#15803d' }]}>100%</Text>
+                  <Text style={[styles.metricHint, isMobile && { fontSize: 10 }]}>Đường may, cúc bấm, phom</Text>
+                </View>
+              </View>
+
+              {/* BẢNG CẢNH BÁO SẢN PHẨM CẦN NHẬP KHO (LOW STOCK ALERT LIST) */}
+              <View style={[styles.cardContainer, { width: '100%', borderColor: lowStockProducts.length > 0 ? '#fecdd3' : '#e2e8f0', backgroundColor: '#ffffff', marginBottom: 14 }, isMobile && { padding: 12 }]}>
+                <View style={[styles.cardHeader, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: 6 }]}>
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <Text style={[styles.cardTitle, isMobile && { fontSize: 14 }]}>⚠️ Cảnh Báo Tồn Kho Cần Nhập Ngay</Text>
+                      {lowStockProducts.length > 0 && (
+                        <View style={{ backgroundColor: '#fee2e2', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, borderWidth: 1, borderColor: '#fca5a5' }}>
+                          <Text style={{ fontSize: 10, fontWeight: '800', color: '#b91c1c' }}>{lowStockProducts.length} sản phẩm cần nhập</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={[styles.cardSubtitle, isMobile && { fontSize: 11 }]}>
+                      Sản phẩm chạm ngưỡng an toàn (≤ 10 chiếc) hoặc đã cạn kho. Bấm &quot;Nhập Hàng&quot; để lập phiếu ngay.
+                    </Text>
+                  </View>
+                  {outOfStockProducts.length > 0 && (
+                    <View style={{ backgroundColor: '#fff1f2', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, alignSelf: isMobile ? 'flex-start' : 'auto' }}>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#be123c' }}>🚨 {outOfStockProducts.length} SP hết hàng (0 chiếc)</Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Danh sách các sản phẩm tồn thấp */}
+                <View style={{ gap: 8, marginTop: 4 }}>
+                  {lowStockProducts.length === 0 ? (
+                    <View style={{ paddingVertical: 18, alignItems: 'center' }}>
+                      <Text style={{ fontSize: 13, color: '#16a34a', fontWeight: '600' }}>✓ Tất cả sản phẩm hiện đều đủ hàng trong kho an toàn</Text>
+                    </View>
+                  ) : (
+                    lowStockProducts.map((prod) => {
+                      const isOutOfStock = (Number(prod.stock) || 0) <= 0;
+                      return (
+                        <View
+                          key={prod.id}
+                          style={[
+                            styles.recentOrderItem,
+                            {
+                              backgroundColor: isOutOfStock ? '#fff1f2' : '#fffbeb',
+                              borderColor: isOutOfStock ? '#fecdd3' : '#fde68a',
+                              padding: isMobile ? 10 : 12
+                            }
+                          ]}
+                        >
+                          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10 }}>
+                            <Image
+                              source={getImageSource(prod.image)}
+                              style={{ width: isMobile ? 42 : 48, height: isMobile ? 42 : 48, borderRadius: 6, backgroundColor: '#f1f5f9' }}
+                              contentFit="cover"
+                            />
+                            <View style={{ flex: 1 }}>
+                              <Text style={[styles.recentOrderCode, isMobile && { fontSize: 12.5 }]} numberOfLines={1}>
+                                {prod.name}
+                              </Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+                                <Text style={{ fontSize: 11, color: '#64748b' }}>
+                                  #{prod.id} &bull; {prod.category || 'Thời trang'}
+                                </Text>
+                                <View style={{
+                                  backgroundColor: isOutOfStock ? '#fee2e2' : '#fef3c7',
+                                  paddingHorizontal: 6,
+                                  paddingVertical: 1.5,
+                                  borderRadius: 4
+                                }}>
+                                  <Text style={{
+                                    fontSize: 10,
+                                    fontWeight: '800',
+                                    color: isOutOfStock ? '#b91c1c' : '#b45309'
+                                  }}>
+                                    {isOutOfStock ? 'HẾT HÀNG (0)' : `CÒN ${prod.stock} CHIẾC`}
+                                  </Text>
+                                </View>
+                              </View>
+                            </View>
+                          </View>
+                          <TouchableOpacity
+                            style={[
+                              styles.badgePill,
+                              {
+                                backgroundColor: '#15803d',
+                                borderColor: '#16a34a',
+                                paddingHorizontal: 10,
+                                paddingVertical: 6,
+                                marginLeft: 8
+                              }
+                            ]}
+                            onPress={() => handleOpenImportModal(prod)}
+                            activeOpacity={0.8}
+                          >
+                            <Text style={[styles.badgePillText, { color: '#ffffff', fontWeight: '700', fontSize: 11 }]}>
+                              📦 Nhập Hàng
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      );
+                    })
+                  )}
                 </View>
               </View>
 
@@ -2514,6 +2918,54 @@ export default function AdminScreen() {
                     {selectedOrder?.payment_method === 'bank' ? 'Chuyển khoản QR' : 'Thanh toán COD'}
                   </Text>
                 </Text>
+
+                {selectedOrder?.payment_method === 'bank' && (
+                  <View style={{
+                    backgroundColor: selectedOrder.payment_status === 'paid_pending_verification' ? '#f5f3ff' : selectedOrder.payment_status === 'paid' ? '#ecfdf5' : '#fff7ed',
+                    borderWidth: 1,
+                    borderColor: selectedOrder.payment_status === 'paid_pending_verification' ? '#c4b5fd' : selectedOrder.payment_status === 'paid' ? '#a7f3d0' : '#fed7aa',
+                    borderRadius: 8,
+                    padding: 10,
+                    marginTop: 8
+                  }}>
+                    <Text style={{
+                      fontSize: 12,
+                      fontWeight: '800',
+                      color: selectedOrder.payment_status === 'paid_pending_verification' ? '#6d28d9' : selectedOrder.payment_status === 'paid' ? '#047857' : '#c2410c'
+                    }}>
+                      {selectedOrder.payment_status === 'paid_pending_verification'
+                        ? '💳 KHÁCH BÁO ĐÃ CHUYỂN KHOẢN (CẦN ĐỐI SOÁT)'
+                        : selectedOrder.payment_status === 'paid'
+                        ? '✓ ĐÃ XÁC NHẬN THANH TOÁN THÀNH CÔNG'
+                        : '⏳ CHƯA XÁC NHẬN CHUYỂN KHOẢN'}
+                    </Text>
+                    <Text style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>
+                      Nội dung CK: <Text style={{ fontWeight: '700' }}>#{selectedOrder.order_code}</Text> • Số tiền: <Text style={{ fontWeight: '700' }}>{formatVND(selectedOrder.total_price)}</Text>
+                    </Text>
+                    {selectedOrder.status === 'Pending' && selectedOrder.payment_status === 'paid_pending_verification' && (
+                      <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                        <TouchableOpacity
+                          style={{ flex: 1, backgroundColor: '#15803d', paddingVertical: 8, borderRadius: 6, alignItems: 'center' }}
+                          onPress={() => {
+                            handleUpdateOrderStatus(selectedOrder.id, 'Processing');
+                            setSelectedOrder((prev: any) => prev ? { ...prev, status: 'Processing', payment_status: 'paid' } : null);
+                          }}
+                        >
+                          <Text style={{ color: '#ffffff', fontWeight: '700', fontSize: 12 }}>✓ Xác nhận tiền & Duyệt đơn</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={{ flex: 1, backgroundColor: '#dc2626', paddingVertical: 8, borderRadius: 6, alignItems: 'center' }}
+                          onPress={async () => {
+                            await handleRejectBankPayment(selectedOrder.id);
+                            setSelectedOrder((prev: any) => prev ? { ...prev, payment_status: 'unpaid' } : null);
+                          }}
+                        >
+                          <Text style={{ color: '#ffffff', fontWeight: '700', fontSize: 12 }}>✕ Chưa thấy tiền</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                )}
               </View>
 
               {/* Items Table */}
@@ -3068,30 +3520,38 @@ export default function AdminScreen() {
 
       {/* MODAL 3: INBOUND STOCK IMPORT & QC */}
       <Modal visible={showImportModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, isDesktop && { maxWidth: 620 }]}>
+        <View style={[styles.modalOverlay, isMobile && { padding: 10 }]}>
+          <View style={[styles.modalCard, isDesktop && { maxWidth: 620 }, isMobile && { padding: 14 }]}>
             <View style={styles.modalHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, marginRight: 8 }}>
                 <View style={styles.importIconBadge}>
                   <IconSymbol name="cube.box" size={16} color="#15803d" />
                 </View>
-                <Text style={styles.modalTitle}>Phiếu Nhập Hàng Vào Kho (Inbound QC)</Text>
+                <Text style={[styles.modalTitle, isMobile && { fontSize: 14 }]} numberOfLines={1}>Phiếu Nhập Hàng Vào Kho</Text>
               </View>
-              <TouchableOpacity onPress={() => setShowImportModal(false)}>
+              <TouchableOpacity
+                onPress={() => setShowImportModal(false)}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                style={{ padding: 4, flexShrink: 0 }}
+              >
                 <IconSymbol name="xmark" size={20} color="#64748b" />
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={{ maxHeight: 520, paddingHorizontal: 20, paddingVertical: 14 }}>
+            <ScrollView 
+              showsVerticalScrollIndicator={false}
+              style={{ maxHeight: 520 }}
+              contentContainerStyle={{ paddingHorizontal: 2, paddingBottom: 12 }}
+            >
               {/* Product Selector - All 26 products searchable */}
               <View style={styles.formGroup}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <View style={{ marginBottom: 6 }}>
                   <Text style={styles.formLabel}>
-                    Chọn sản phẩm nhập kho ({products.length} sản phẩm có sẵn) *
+                    Chọn sản phẩm nhập kho ({products.length} SP có sẵn) *
                   </Text>
                   {importProduct && (
-                    <Text style={{ fontSize: 11, color: '#15803d', fontWeight: '700' }}>
-                      Đang chọn: #{importProduct.id} {importProduct.name?.substring(0, 18)}...
+                    <Text style={{ fontSize: 11, color: '#15803d', fontWeight: '700', marginTop: 2 }} numberOfLines={1}>
+                      Đang chọn: #{importProduct.id} - {importProduct.name}
                     </Text>
                   )}
                 </View>
@@ -3217,7 +3677,7 @@ export default function AdminScreen() {
               </View>
 
               {/* Variant Selection: Size & Color */}
-              <View style={styles.formRow}>
+              <View style={[styles.formRow, isMobile && { flexDirection: 'column', gap: 10 }]}>
                 <View style={[styles.formGroup, { flex: 1 }]}>
                   <Text style={styles.formLabel}>Phân loại Size cần nhập *</Text>
                   <View style={styles.supplierChipsRow}>
@@ -3254,7 +3714,7 @@ export default function AdminScreen() {
               </View>
 
               {/* Quantity & Cost Price */}
-              <View style={styles.formRow}>
+              <View style={[styles.formRow, isMobile && { flexDirection: 'column', gap: 10 }]}>
                 <View style={[styles.formGroup, { flex: 1 }]}>
                   <Text style={styles.formLabel}>Số lượng nhập thêm *</Text>
                   <TextInput
@@ -3694,7 +4154,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
   },
   scrollContent: {
-    padding: 12,
+    padding: 10,
+    paddingBottom: 70,
     width: '100%',
   },
   tabContent: {
@@ -3710,7 +4171,7 @@ const styles = StyleSheet.create({
   },
   metricCard: {
     flex: 1,
-    minWidth: 150,
+    minWidth: 140,
     backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 18,
@@ -4308,7 +4769,7 @@ const styles = StyleSheet.create({
   },
   productCard: {
     flex: 1,
-    minWidth: 260,
+    minWidth: 155,
     backgroundColor: '#ffffff',
     borderRadius: 12,
     overflow: 'hidden',
@@ -4392,10 +4853,16 @@ const styles = StyleSheet.create({
   },
   productActionsRow: {
     flexDirection: 'row',
-    gap: 8,
+    flexWrap: 'wrap',
+    gap: 6,
     borderTopWidth: 1,
     borderTopColor: '#f1f5f9',
     paddingTop: 10,
+  },
+  productActionButtonsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   editProdBtn: {
     flex: 1,
@@ -5184,7 +5651,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    minWidth: 260,
+    minWidth: 200,
   },
   userAvatar: {
     width: 44,
@@ -5284,7 +5751,7 @@ const styles = StyleSheet.create({
   },
   voucherCard: {
     flex: 1,
-    minWidth: 260,
+    minWidth: 155,
     backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 16,
@@ -5954,5 +6421,137 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#475569',
     fontWeight: '600',
+  },
+  /* ACTION CENTER: CÔNG VIỆC CẦN ADMIN XỬ LÝ */
+  actionCenterContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  actionCenterHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  actionCenterTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  actionCenterPulseWrap: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#f1f5f9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  actionCenterDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  actionCenterTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0f172a',
+    letterSpacing: -0.2,
+  },
+  actionCenterSub: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  actionCenterCountBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  actionCenterCountText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  actionCardsGrid: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  actionCardItem: {
+    flex: 1,
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    justifyContent: 'space-between',
+  },
+  actionCardNormal: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
+  },
+  actionCardAlertAmber: {
+    backgroundColor: '#fffbeb',
+    borderColor: '#fde68a',
+  },
+  actionCardAlertPurple: {
+    backgroundColor: '#faf5ff',
+    borderColor: '#ddd6fe',
+  },
+  actionCardAlertRed: {
+    backgroundColor: '#fff1f2',
+    borderColor: '#fecdd3',
+  },
+  actionCardTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  actionCardIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  actionCardBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  actionCardBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  actionCardHeading: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginBottom: 6,
+  },
+  actionCardDesc: {
+    fontSize: 12,
+    color: '#475569',
+    lineHeight: 17,
+    marginBottom: 12,
+  },
+  actionCardFooter: {
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.06)',
+    paddingTop: 8,
+  },
+  actionCardLinkText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
 });
