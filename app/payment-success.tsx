@@ -46,7 +46,7 @@ export default function PaymentSuccessScreen() {
     if (isSimulating || isSimulatedPaid) return;
     setIsSimulating(true);
     try {
-      const res = await fetch(`${API_URL}/api/orders/${cleanOrderCode}/simulate-bank-payment`, {
+      const res = await fetch(`${API_URL}/api/orders/${cleanOrderCode}/confirm-payment-transfer`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -57,7 +57,7 @@ export default function PaymentSuccessScreen() {
         alert(data.message || 'Không thể xác nhận giao dịch');
       }
     } catch (err) {
-      console.error('Lỗi mô phỏng thanh toán:', err);
+      console.error('Lỗi xác nhận chuyển khoản:', err);
       setIsSimulatedPaid(true);
     } finally {
       setIsSimulating(false);
@@ -85,12 +85,12 @@ export default function PaymentSuccessScreen() {
             {isSimulatedPaid ? (
               <View style={styles.simulatedSuccessCard}>
                 <View style={styles.simulatedSuccessIcon}>
-                  <IconSymbol name="checkmark.seal.fill" size={32} color="#15803d" />
+                  <IconSymbol name="clock.arrow.circlepath" size={28} color="#7c3aed" />
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.simulatedSuccessTitle}>ĐÃ THANH TOÁN THÀNH CÔNG (SANDBOX)</Text>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.simulatedSuccessTitle}>ĐÃ GỬI XÁC NHẬN CHUYỂN KHOẢN</Text>
                   <Text style={styles.simulatedSuccessSub}>
-                    Hệ thống đã nhận diện giao dịch chuyển khoản cho đơn hàng {displayOrderCode} và tự động chuyển trạng thái sang &ldquo;Đang chuẩn bị hàng&rdquo;.
+                    Hệ thống đã ghi nhận thông báo chuyển khoản cho đơn hàng {displayOrderCode}. Đơn hàng đang ở trạng thái &ldquo;Chờ hệ thống duyệt&rdquo;. Hệ thống sẽ đối soát thanh toán và xuất kho gửi hàng cho bạn ngay nhé!
                   </Text>
                 </View>
               </View>
@@ -163,7 +163,7 @@ export default function PaymentSuccessScreen() {
                   </View>
                 </View>
 
-                {/* Simulation Action Button for Coursework / Testing */}
+                {/* Customer Transfer Confirmation Box */}
                 <View style={styles.sandboxActionsBox}>
                   <TouchableOpacity 
                     style={styles.simulatePayBtn} 
@@ -175,15 +175,15 @@ export default function PaymentSuccessScreen() {
                       <ActivityIndicator size="small" color="#ffffff" />
                     ) : (
                       <>
-                        <IconSymbol name="bolt.fill" size={18} color="#ffffff" />
-                        <Text style={styles.simulatePayBtnText}>Xác nhận đã chuyển khoản (Demo / Sandbox)</Text>
+                        <IconSymbol name="checkmark.circle.fill" size={18} color="#ffffff" />
+                        <Text style={styles.simulatePayBtnText}>Tôi đã chuyển khoản xong</Text>
                       </>
                     )}
                   </TouchableOpacity>
                   <View style={styles.sandboxTipRow}>
                     <IconSymbol name="info.circle" size={14} color="#64748b" />
                     <Text style={styles.sandboxTipText}>
-                      Dành cho BTL/Thử nghiệm: Bạn không cần chuyển tiền thật. Bấm nút trên để mô phỏng webhook khớp lệnh tự động.
+                      Sau khi hoàn tất quét mã QR, bấm nút trên để thông báo cho Shop kiểm tra biến động số dư và duyệt đơn hàng.
                     </Text>
                   </View>
                 </View>
@@ -214,17 +214,33 @@ export default function PaymentSuccessScreen() {
           </View>
 
           <View style={styles.cardRow}>
-            <Text style={styles.cardLabel}>Phương thức thanh toán</Text>
-            <Text style={[styles.cardValue, { fontSize: 14 }]}>
+            <Text style={styles.cardLabel}>Phương thức</Text>
+            <Text style={[styles.cardValue, { fontSize: 13, flex: 1, textAlign: 'right' }]} numberOfLines={1}>
               {isBankPayment ? 'Chuyển khoản VietQR' : 'Tiền mặt khi nhận hàng (COD)'}
             </Text>
           </View>
 
           <View style={styles.cardRow}>
-            <Text style={styles.cardLabel}>Trạng thái thanh toán</Text>
-            <Text style={[styles.cardValue, { fontSize: 14, color: isSimulatedPaid || !isBankPayment ? '#16a34a' : '#b45309', fontWeight: '700' }]}>
-              {isBankPayment ? (isSimulatedPaid ? '✓ Đã thanh toán (Sandbox)' : '⏳ Chờ chuyển khoản') : 'Chờ thanh toán khi nhận hàng'}
-            </Text>
+            <Text style={styles.cardLabel}>Thanh toán</Text>
+            <View style={{ flex: 1, alignItems: 'flex-end' }}>
+              {isBankPayment ? (
+                isSimulatedPaid ? (
+                  <View style={styles.statusBadgePending}>
+                    <IconSymbol name="clock.arrow.circlepath" size={12} color="#6d28d9" />
+                    <Text style={styles.statusBadgePendingText}>Chờ hệ thống duyệt</Text>
+                  </View>
+                ) : (
+                  <View style={styles.statusBadgeWaiting}>
+                    <IconSymbol name="clock" size={12} color="#b45309" />
+                    <Text style={styles.statusBadgeWaitingText}>Chờ chuyển khoản</Text>
+                  </View>
+                )
+              ) : (
+                <Text style={[styles.cardValue, { fontSize: 13, color: '#64748b', fontWeight: '600' }]} numberOfLines={1}>
+                  Thanh toán khi nhận hàng
+                </Text>
+              )}
+            </View>
           </View>
           
           <View style={[styles.cardRow, styles.cardRowNoBorder]}>
@@ -423,9 +439,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 12,
-    backgroundColor: '#ecfdf5',
+    backgroundColor: '#f5f3ff',
     borderWidth: 1,
-    borderColor: '#a7f3d0',
+    borderColor: '#ddd6fe',
     borderRadius: 12,
     padding: 16,
   },
@@ -433,21 +449,53 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#d1fae5',
+    backgroundColor: '#ede9fe',
     alignItems: 'center',
     justifyContent: 'center',
   },
   simulatedSuccessTitle: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#065f46',
-    letterSpacing: 0.5,
+    color: '#6d28d9',
+    letterSpacing: 0.3,
     marginBottom: 4,
   },
   simulatedSuccessSub: {
     fontSize: 13,
-    color: '#047857',
+    color: '#5b21b6',
     lineHeight: 18,
+  },
+  statusBadgePending: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#f5f3ff',
+    borderWidth: 1,
+    borderColor: '#ddd6fe',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  statusBadgePendingText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6d28d9',
+  },
+  statusBadgeWaiting: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#fffbeb',
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  statusBadgeWaitingText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#b45309',
   },
   codCard: {
     width: '100%',
@@ -502,6 +550,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
+    gap: 12,
   },
   cardRowNoBorder: {
     borderBottomWidth: 0,
