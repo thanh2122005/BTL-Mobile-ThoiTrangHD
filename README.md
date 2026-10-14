@@ -43,8 +43,10 @@ npm run backend
 * Backend RESTful API sẽ chạy tại: `http://localhost:5000`
 
 ### Bước 3: Khởi động Frontend (React Native Expo Web / Mobile)
-Mở một cửa sổ Terminal thứ hai và chạy:
 ```bash
+### Bước 3: Khởi động Frontend (React Native Expo Web / Mobile)
+Mở một cửa sổ Terminal thứ hai và chạy: 
+Mở một cửa sổ Terminal thứ hai và chạy: 
 npm run web
 ```
 * Giao diện Web sẽ chạy tại: `http://localhost:8081`
