@@ -1,4 +1,5 @@
 const express = require('express');
+const { handleChatbotMessage } = require('./chatbotService');
 const cors = require('cors');
 const mysql = require('mysql2/promise');
 const multer = require('multer');
@@ -705,10 +706,11 @@ app.post('/api/orders', async (req, res) => {
     const orderCode = 'HD' + Date.now().toString().slice(-6);
 
     // 3. Tạo bản ghi đơn hàng
+    const initialPaymentStatus = paymentMethod === 'bank' ? 'pending' : 'unpaid';
     const [result] = await connection.query(
-      `INSERT INTO orders (user_id, order_code, customer_name, customer_phone, customer_address, payment_method, voucher_code, subtotal, discount_amount, shipping_fee, total_price, order_note, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')`,
-      [userId, orderCode, customerName, customerPhone, customerAddress, paymentMethod, (voucherCode && String(voucherCode).trim()) ? String(voucherCode).trim().toUpperCase() : null, computedSubtotal, validatedDiscount, shippingFee, validatedTotalPrice, orderNote || null]
+      `INSERT INTO orders (user_id, order_code, customer_name, customer_phone, customer_address, payment_method, voucher_code, subtotal, discount_amount, shipping_fee, total_price, order_note, status, payment_status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?)`,
+      [userId, orderCode, customerName, customerPhone, customerAddress, paymentMethod, (voucherCode && String(voucherCode).trim()) ? String(voucherCode).trim().toUpperCase() : null, computedSubtotal, validatedDiscount, shippingFee, validatedTotalPrice, orderNote || null, initialPaymentStatus]
     );
 
     const orderId = result.insertId;
@@ -987,13 +989,13 @@ app.put('/api/orders/:identifier/cancel', async (req, res) => {
 });
 
 
-// API 6.2: Giả lập thanh toán chuyển khoản (Sandbox Payment Webhook Simulator cho BTL/Demo)
-app.put('/api/orders/:identifier/simulate-bank-payment', async (req, res) => {
+// API 6.2: Khách hàng xác nhận đã chuyển khoản ngân hàng (Chờ Admin đối soát sao kê)
+app.put(['/api/orders/:identifier/simulate-bank-payment', '/api/orders/:identifier/confirm-payment-transfer'], async (req, res) => {
   try {
     const identifier = req.params.identifier;
-    let query = 'SELECT id, order_code, status, payment_method, total_price FROM orders WHERE id = ?';
+    let query = 'SELECT id, order_code, status, payment_method, total_price, payment_status FROM orders WHERE id = ?';
     if (isNaN(Number(identifier))) {
-      query = 'SELECT id, order_code, status, payment_method, total_price FROM orders WHERE order_code = ?';
+      query = 'SELECT id, order_code, status, payment_method, total_price, payment_status FROM orders WHERE order_code = ?';
     }
     const [orders] = await pool.query(query, [identifier]);
     if (orders.length === 0) {
@@ -1003,24 +1005,56 @@ app.put('/api/orders/:identifier/simulate-bank-payment', async (req, res) => {
     if (order.status !== 'Pending') {
       return res.json({
         success: true,
-        message: 'Đơn hàng đã được thanh toán hoặc xác nhận trước đó!',
+        message: 'Đơn hàng đã được xác nhận thanh toán trước đó!',
         orderId: order.id,
         orderCode: order.order_code,
-        status: order.status
+        status: order.status,
+        payment_status: order.payment_status || 'paid'
       });
     }
-    await pool.query('UPDATE orders SET status = ? WHERE id = ?', ['Processing', order.id]);
-    console.log('[Payment-Simulator]: Đơn hàng #' + (order.order_code || order.id) + ' đã mô phỏng thanh toán VietQR thành công.');
+
+    // Đánh dấu khách hàng đã báo chuyển khoản, giữ status là Pending để chờ Admin duyệt tay
+    await pool.query("UPDATE orders SET payment_status = 'paid_pending_verification' WHERE id = ?", [order.id]);
+    console.log('[Bank-Transfer]: Khách hàng báo đã chuyển khoản cho đơn hàng #' + (order.order_code || order.id) + ' -> Chờ Admin đối soát sao kê.');
     res.json({
       success: true,
-      message: 'Xác nhận thanh toán chuyển khoản thành công (Mô phỏng Sandbox)!',
+      message: 'Đã gửi thông báo chuyển khoản thành công! Cửa hàng đang đối soát số dư và sẽ duyệt đơn hàng cho bạn ngay.',
       orderId: order.id,
       orderCode: order.order_code,
-      status: 'Processing'
+      status: 'Pending',
+      payment_status: 'paid_pending_verification'
     });
   } catch (err) {
-    console.error('Lỗi simulate-bank-payment:', err);
-    res.status(500).json({ success: false, message: 'Lỗi server khi mô phỏng thanh toán' });
+    console.error('Lỗi confirm payment transfer:', err);
+    res.status(500).json({ success: false, message: 'Lỗi server khi xác nhận chuyển khoản' });
+  }
+});
+
+// API 6.3: Admin từ chối/báo chưa nhận được tiền chuyển khoản
+app.put('/api/orders/:identifier/reject-bank-payment', async (req, res) => {
+  try {
+    const identifier = req.params.identifier;
+    let query = 'SELECT id, order_code, status FROM orders WHERE id = ?';
+    if (isNaN(Number(identifier))) {
+      query = 'SELECT id, order_code, status FROM orders WHERE order_code = ?';
+    }
+    const [orders] = await pool.query(query, [identifier]);
+    if (orders.length === 0) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng' });
+    }
+    const order = orders[0];
+    await pool.query("UPDATE orders SET payment_status = 'unpaid' WHERE id = ?", [order.id]);
+    console.log('[Bank-Transfer]: Admin báo chưa nhận được tiền cho đơn hàng #' + (order.order_code || order.id));
+    res.json({
+      success: true,
+      message: 'Đã báo chưa nhận được tiền chuyển khoản. Đơn hàng quay về trạng thái Chưa thanh toán.',
+      orderId: order.id,
+      orderCode: order.order_code,
+      payment_status: 'unpaid'
+    });
+  } catch (err) {
+    console.error('Lỗi reject bank payment:', err);
+    res.status(500).json({ success: false, message: 'Lỗi server' });
   }
 });
 
@@ -1717,7 +1751,13 @@ app.put('/api/admin/orders/:id/status', async (req, res) => {
       }
     }
 
-    await connection.query('UPDATE orders SET status = ? WHERE id = ?', [status, orderId]);
+    if (status === 'Processing') {
+      await connection.query("UPDATE orders SET status = ?, payment_status = IF(payment_method = 'bank', 'paid', payment_status) WHERE id = ?", [status, orderId]);
+    } else if (status === 'Completed') {
+      await connection.query("UPDATE orders SET status = ?, payment_status = 'paid' WHERE id = ?", [status, orderId]);
+    } else {
+      await connection.query('UPDATE orders SET status = ? WHERE id = ?', [status, orderId]);
+    }
 
     await connection.commit();
     const statusVi = status === 'Processing' ? 'Đang giao' : status === 'Completed' ? 'Hoàn thành' : status === 'Cancelled' ? 'Đã hủy' : 'Chờ xác nhận';
@@ -2330,13 +2370,36 @@ app.put('/api/admin/orders/:id/fast-complete', async (req, res) => {
   }
 });
 
+
+// ==========================================
+// CHATBOT AI API (Mobile-Optimized Assistant)
+// ==========================================
+app.post('/api/chatbot', async (req, res) => {
+  try {
+    const { message, userId } = req.body;
+    if (!message || typeof message !== 'string' || !message.trim()) {
+      return res.status(400).json({ success: false, message: 'Nội dung tin nhắn không được để trống' });
+    }
+    const responseData = await handleChatbotMessage(pool, message.trim(), userId);
+    res.json({ success: true, ...responseData });
+  } catch (err) {
+    console.error('Chatbot endpoint error:', err);
+    res.status(500).json({
+      success: false,
+      reply: 'Dạ xin lỗi quý khách, hệ thống trợ lý ảo đang bận một chút. Quý khách vui lòng thử lại sau giây lát nhé! 🙏',
+      intent: 'fallback',
+      suggested_actions: ['Tư vấn chọn size', 'Tra cứu đơn hàng', 'Xem áo Polo', 'Mã giảm giá hôm nay']
+    });
+  }
+});
+
 // BACKGROUND RUNNER: Mô phỏng vận chuyển tự động thông minh (mỗi 15 giây kiểm tra 1 lần)
 setInterval(async () => {
   if (!isAutoProgressionActive) return;
   try {
     // 1. Tự động chuyển đơn Pending > 20 giây sang Processing (Tự động xác nhận & xuất kho)
     const [pendingRes] = await pool.query(
-      "UPDATE orders SET status = 'Processing' WHERE status = 'Pending' AND created_at <= NOW() - INTERVAL 20 SECOND"
+      "UPDATE orders SET status = 'Processing' WHERE status = 'Pending' AND (payment_status IS NULL OR payment_status != 'paid_pending_verification') AND created_at <= NOW() - INTERVAL 20 SECOND"
     );
     if (pendingRes.affectedRows > 0) {
       console.log(`[Auto-Workflow]: ⚡ Tự động xác nhận & xuất kho ${pendingRes.affectedRows} đơn hàng.`);
