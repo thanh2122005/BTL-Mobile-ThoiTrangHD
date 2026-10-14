@@ -7,6 +7,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { FavoriteProvider } from '@/contexts/FavoriteContext';
 import { CartProvider } from '@/contexts/CartContext';
+import { ChatbotWidget } from '@/components/ui/ChatbotWidget';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -26,6 +27,7 @@ export default function RootLayout() {
               <Stack.Screen name="register" options={{ headerShown: false }} />
               <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal', headerShown: true }} />
             </Stack>
+            <ChatbotWidget />
             <StatusBar style="auto" />
           </ThemeProvider>
         </CartProvider>
