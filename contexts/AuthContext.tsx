@@ -23,7 +23,9 @@ interface AuthContextType {
   updateProfile: (data: Partial<User>) => Promise<{ success: boolean; message?: string }>;
 }
 
+// Quản lý phiên đăng nhập và thông tin người dùng toàn cục
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+// Key lưu thông tin user trong bộ nhớ thiết bị bằng AsyncStorage
 const USER_STORAGE_KEY = 'THOITRANGHD_USER';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {

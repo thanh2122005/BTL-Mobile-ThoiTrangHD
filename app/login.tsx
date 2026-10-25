@@ -34,6 +34,7 @@ export default function LoginScreen() {
     }
   }, [user]);
 
+  // [Chức năng UI: "Đăng nhập"] - Kiểm tra thông tin tài khoản và xác thực phiên đăng nhập qua AuthContext
   const handleLogin = async () => {
     setErrorMsg('');
     if (!email.trim() || !password) {

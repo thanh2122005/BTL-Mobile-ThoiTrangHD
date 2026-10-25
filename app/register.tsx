@@ -36,6 +36,7 @@ export default function RegisterScreen() {
     }
   }, [user]);
 
+  // [Chức năng UI: "Đăng ký"] - Kiểm tra thông tin, mật khẩu tối thiểu 6 ký tự và tạo tài khoản mới
   const handleRegister = async () => {
     setErrorMsg('');
     if (!name.trim() || !email.trim() || !phone.trim() || !password) {
