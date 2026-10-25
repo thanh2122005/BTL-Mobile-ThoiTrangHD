@@ -129,6 +129,7 @@ export default function UserScreen() {
               </View>
             )}
 
+            {/* [Chức năng UI: "Chỉnh sửa hồ sơ"] */}
             <TouchableOpacity
               style={[styles.editProfileBtn, { marginTop: 16 }]}
               onPress={() => router.push('/edit-profile')}
@@ -147,12 +148,14 @@ export default function UserScreen() {
               Đăng nhập để xem lịch sử đơn hàng, địa chỉ giao hàng và danh sách sản phẩm yêu thích
             </Text>
             <View style={styles.guestButtonGroup}>
+              {/* [Chức năng UI: "Đăng nhập"] */}
               <TouchableOpacity
                 style={styles.guestLoginBtn}
                 onPress={() => router.push('/login')}
               >
                 <Text style={styles.guestLoginBtnText}>Đăng nhập</Text>
               </TouchableOpacity>
+              {/* [Chức năng UI: "Đăng ký"] */}
               <TouchableOpacity
                 style={styles.guestRegisterBtn}
                 onPress={() => router.push('/register')}
@@ -164,6 +167,7 @@ export default function UserScreen() {
         )}
 
         {/* Menu Navigation Items */}
+        {/* [Chức năng UI: "Đơn hàng của tôi", "Sản phẩm yêu thích", "Quản trị hệ thống"] */}
         <View style={styles.menuList}>
           {[
             { id: 1, name: 'Đơn hàng của tôi', icon: 'cube.box', route: '/orders' },
@@ -208,7 +212,7 @@ export default function UserScreen() {
           ))}
         </View>
 
-        {/* Logout Button if logged in */}
+        {/* [Chức năng UI: "Đăng xuất tài khoản"] */}
         {user ? (
           <View style={styles.logoutSection}>
             <TouchableOpacity

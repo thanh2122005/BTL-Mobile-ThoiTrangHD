@@ -84,6 +84,8 @@ const MAPPING = {
   'sparkles': 'auto-awesome',
   'pencil': 'edit',
   'headphones': 'headphones',
+  'chart.bar.xaxis': 'bar-chart',
+  'printer': 'print',
 } as IconMapping;
 
 /**

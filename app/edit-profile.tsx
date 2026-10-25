@@ -37,6 +37,7 @@ export default function EditProfileScreen() {
     }
   }, [user]);
 
+  // [Chức năng UI: "Lưu thay đổi"] - Cập nhật họ tên, số điện thoại, địa chỉ vào CSDL và đồng bộ AuthContext
   const handleSave = async () => {
     setMessage(null);
     if (!name.trim()) {

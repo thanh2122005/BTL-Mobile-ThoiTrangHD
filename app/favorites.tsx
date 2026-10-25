@@ -24,6 +24,7 @@ export default function FavoritesScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       {/* Header */}
+      {/* [Chức năng UI: "Sản phẩm yêu thích"] - Danh sách sản phẩm người dùng đã thả tim */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <TouchableOpacity style={styles.iconButton} onPress={() => router.back()}>
@@ -45,6 +46,7 @@ export default function FavoritesScreen() {
           <Text style={styles.emptyDesc}>
             Lưu lại những thiết kế bạn ấn tượng nhất bằng cách nhấn biểu tượng ❤️ để dễ dàng xem lại và mua sắm sau.
           </Text>
+          {/* [Chức năng UI: "Khám phá bộ sưu tập"] */}
           <TouchableOpacity
             style={styles.exploreBtn}
             onPress={() => router.push('/(tabs)/products')}
