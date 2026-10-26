@@ -1,24 +1,24 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import {
-  StyleSheet,
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  SafeAreaView,
-  Platform,
-  ActivityIndicator,
-  Modal,
-  TextInput,
-} from 'react-native';
-import { Image } from 'expo-image';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { API_URL } from '@/constants/config';
+import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
 import { useFavorites } from '@/contexts/FavoriteContext';
-import { useAuth } from '@/contexts/AuthContext';
-import { API_URL } from '@/constants/config';
 import { useResponsive } from '@/hooks/useResponsive';
+import { Image } from 'expo-image';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Modal,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 import { getImageSource } from '@/constants/images';
 
@@ -29,12 +29,13 @@ export default function ProductDetailScreen() {
   const { addToCart, itemCount } = useCart();
   const { isFavorite, toggleFavorite } = useFavorites();
   const { isMobile, isLargeScreen, width } = useResponsive();
-  
+
   const [product, setProduct] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [selectedSize, setSelectedSize] = useState('M');
   const [selectedColor, setSelectedColor] = useState('#000000');
 
+  // Lọc danh sách màu sắc duy nhất từ các biến thể của sản phẩm
   const availableColors = useMemo(() => {
     if (product?.variants && Array.isArray(product.variants) && product.variants.length > 0) {
       const seen = new Set<string>();
@@ -55,6 +56,7 @@ export default function ProductDetailScreen() {
     ];
   }, [product]);
 
+  // Lọc danh sách kích cỡ: giày (35-43), phụ kiện (Freesize), quần áo (S, M, L, XL)
   const availableSizes = useMemo(() => {
     if (product?.variants && Array.isArray(product.variants) && product.variants.length > 0) {
       const seen = new Set<string>();
@@ -70,13 +72,14 @@ export default function ProductDetailScreen() {
     }
     const isShoe = product?.category?.toLowerCase() === 'giày';
     const isAccessory = product?.category?.toLowerCase() === 'phụ kiện';
-    return isShoe 
-      ? ['35', '36', '37', '38', '39', '40', '41', '42', '43'] 
-      : isAccessory 
-        ? ['Freesize'] 
+    return isShoe
+      ? ['35', '36', '37', '38', '39', '40', '41', '42', '43']
+      : isAccessory
+        ? ['Freesize']
         : ['S', 'M', 'L', 'XL'];
   }, [product]);
 
+  // Lấy tên hiển thị của màu đang chọn
   const colorName = useMemo(() => {
     const found = availableColors.find(c => c.code === selectedColor);
     if (found) return found.name;
@@ -87,6 +90,7 @@ export default function ProductDetailScreen() {
     return selectedColor === '#000000' ? 'Đen' : selectedColor === '#E5D3B3' ? 'Be' : selectedColor === '#FFFFFF' ? 'Trắng' : 'Màu tiêu chuẩn';
   }, [selectedColor, availableColors, product]);
 
+  // Tìm biến thể khớp chính xác cả Size và Màu đã chọn để kiểm tra tồn kho
   const activeVariant = useMemo(() => {
     if (!product?.variants || !Array.isArray(product.variants)) return null;
     return product.variants.find(
@@ -96,21 +100,27 @@ export default function ProductDetailScreen() {
     ) || null;
   }, [product, selectedSize, selectedColor, colorName]);
 
+  // Lấy số lượng tồn kho của biến thể đang chọn (nếu hết hàng thì khóa nút đặt)
   const currentVariantStock = activeVariant !== null ? activeVariant.stock : (product?.stock || 0);
   const isOutOfStock = currentVariantStock <= 0;
+
+  // [Chức năng UI: "Hướng dẫn chọn size"] - Quản lý hiển thị modal hướng dẫn chọn size và số đo nhập vào
   const [showSizeGuide, setShowSizeGuide] = useState(false);
   const [calcHeight, setCalcHeight] = useState('168');
   const [calcWeight, setCalcWeight] = useState('62');
 
+  // [Chức năng UI: "Hướng dẫn chọn size"] - Tính toán gợi ý size chuẩn dựa trên chiều cao và cân nặng
   const getRecommendedSize = (hStr: string, wStr: string, isShoe: boolean) => {
     const h = parseInt(hStr, 10) || 168;
     const w = parseInt(wStr, 10) || 62;
+    // Nếu là giày dép thì trả về kích cỡ số 37 - 42
     if (isShoe) {
       if (h < 160 || w < 50) return '37';
       if (h < 168 || w < 60) return '39';
       if (h < 175 || w < 72) return '41';
       return '42';
     }
+    // Nếu là quần áo thì phân loại theo S, M, L, XL
     if (h < 162 && w < 54) return 'S';
     if (h < 172 && w < 65) return 'M';
     if (h < 180 && w < 76) return 'L';
@@ -332,10 +342,10 @@ export default function ProductDetailScreen() {
           } else {
             const isShoe = prodData.category?.toLowerCase() === 'giày';
             const isAccessory = prodData.category?.toLowerCase() === 'phụ kiện';
-            const available = isShoe 
-              ? ['35', '36', '37', '38', '39', '40', '41', '42', '43'] 
-              : isAccessory 
-                ? ['Freesize'] 
+            const available = isShoe
+              ? ['35', '36', '37', '38', '39', '40', '41', '42', '43']
+              : isAccessory
+                ? ['Freesize']
                 : ['S', 'M', 'L', 'XL'];
             if (!available.includes(selectedSize)) {
               setSelectedSize(available[0]);
@@ -379,8 +389,8 @@ export default function ProductDetailScreen() {
     return (
       <SafeAreaView style={[styles.safeArea, { justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
         <Text style={{ fontSize: 18, fontWeight: '600', marginBottom: 12 }}>Không tìm thấy sản phẩm</Text>
-        <TouchableOpacity 
-          style={{ backgroundColor: '#000', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24 }} 
+        <TouchableOpacity
+          style={{ backgroundColor: '#000', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24 }}
           onPress={() => router.back()}
         >
           <Text style={{ color: '#fff', fontWeight: '500' }}>Quay lại</Text>
@@ -390,10 +400,11 @@ export default function ProductDetailScreen() {
   }
 
   const imageSource = getImageSource(product.image);
-  const formattedPrice = typeof product.price === 'number' 
-    ? new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(product.price) 
+  const formattedPrice = typeof product.price === 'number'
+    ? new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(product.price)
     : product.price;
 
+  // [Chức năng UI: "Thêm vào giỏ hàng"] - Thêm sản phẩm kèm size, màu và kiểm tra tồn kho của phân loại đó
   const handleAddToCart = () => {
     if (currentVariantStock <= 0) {
       showToast('Phân loại kích thước / màu sắc này hiện đã hết hàng');
@@ -412,6 +423,7 @@ export default function ProductDetailScreen() {
     showToast('Đã thêm sản phẩm vào giỏ hàng');
   };
 
+  // [Chức năng UI: "Mua ngay"] - Đưa sản phẩm vào giỏ hàng và chuyển hướng ngay sang trang thanh toán checkout
   const handleBuyNow = () => {
     if (currentVariantStock <= 0) {
       showToast('Phân loại kích thước / màu sắc này hiện đã hết hàng');
@@ -454,17 +466,17 @@ export default function ProductDetailScreen() {
           </Text>
 
           <View style={styles.headerActions}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.iconButton}
               onPress={() => {
                 toggleFavorite(product);
               }}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <IconSymbol 
-                name={isFavorite(product.id) ? "heart.fill" : "heart"} 
-                size={22} 
-                color={isFavorite(product.id) ? "#e53935" : "#1a1c1c"} 
+              <IconSymbol
+                name={isFavorite(product.id) ? "heart.fill" : "heart"}
+                size={22}
+                color={isFavorite(product.id) ? "#e53935" : "#1a1c1c"}
               />
             </TouchableOpacity>
 
@@ -480,19 +492,19 @@ export default function ProductDetailScreen() {
         </View>
       </View>
 
-      <ScrollView 
-        showsVerticalScrollIndicator={false} 
-        style={styles.scrollView} 
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
       >
         <View style={[styles.mainLayout, isLargeScreen && styles.mainLayoutLarge]}>
-          
+
           {/* Gallery Section */}
           <View style={[styles.gallerySection, isLargeScreen && styles.gallerySectionLarge]}>
-            <Image 
-              source={imageSource} 
-              style={styles.mainImage} 
-              contentFit="cover" 
+            <Image
+              source={imageSource}
+              style={styles.mainImage}
+              contentFit="cover"
             />
             <View style={styles.paginationDots}>
               <View style={[styles.dot, styles.dotActive]} />
@@ -503,7 +515,7 @@ export default function ProductDetailScreen() {
 
           {/* Product Info Section */}
           <View style={[styles.infoSection, isLargeScreen && styles.infoSectionLarge]}>
-            
+
             {/* Category tag */}
             {product.category && (
               <View style={styles.categoryBadge}>
@@ -529,10 +541,10 @@ export default function ProductDetailScreen() {
               <Text style={styles.soldText}>Đã bán {product.sold_count !== undefined ? product.sold_count : 0}</Text>
               <View style={styles.dotSeparator} />
               <View style={[styles.stockBadge, currentVariantStock <= 0 && { backgroundColor: '#fef2f2' }]}>
-                <IconSymbol 
-                  name={currentVariantStock > 0 ? "checkmark.circle.fill" : "exclamationmark.circle.fill"} 
-                  size={13} 
-                  color={currentVariantStock > 0 ? "#16a34a" : "#dc2626"} 
+                <IconSymbol
+                  name={currentVariantStock > 0 ? "checkmark.circle.fill" : "exclamationmark.circle.fill"}
+                  size={13}
+                  color={currentVariantStock > 0 ? "#16a34a" : "#dc2626"}
                 />
                 <Text style={[styles.stockBadgeText, currentVariantStock <= 0 && styles.stockBadgeTextOut]}>
                   {currentVariantStock > 0 ? `Tồn kho: ${currentVariantStock}` : 'Tạm hết hàng'}
@@ -562,11 +574,11 @@ export default function ProductDetailScreen() {
               <Text style={styles.optionTitle}>MÀU SẮC: <Text style={{ color: "#000000", fontWeight: "800" }}>{colorName}</Text></Text>
               <View style={styles.colorOptions}>
                 {availableColors.map((item) => (
-                  <TouchableOpacity 
-                    key={item.code} 
+                  <TouchableOpacity
+                    key={item.code}
                     style={[
-                      styles.colorCircle, 
-                      { 
+                      styles.colorCircle,
+                      {
                         backgroundColor: item.code,
                         borderWidth: item.code.toLowerCase() === '#ffffff' ? 1 : 0,
                         borderColor: '#d1d5db'
@@ -589,8 +601,8 @@ export default function ProductDetailScreen() {
               </View>
               <View style={styles.sizeOptions}>
                 {availableSizes.map((size) => (
-                  <TouchableOpacity 
-                    key={size} 
+                  <TouchableOpacity
+                    key={size}
                     style={[
                       styles.sizeBox,
                       selectedSize === size && styles.sizeBoxSelected
@@ -839,8 +851,8 @@ export default function ProductDetailScreen() {
                   ? new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(item.price)
                   : item.price;
                 return (
-                  <TouchableOpacity 
-                    key={item.id} 
+                  <TouchableOpacity
+                    key={item.id}
                     style={styles.relatedCard}
                     onPress={() => router.push(`/products/${item.id}`)}
                   >
@@ -862,8 +874,8 @@ export default function ProductDetailScreen() {
       {/* Action Bar (Pinned Bottom) */}
       <View style={[styles.bottomBar, isLargeScreen && styles.bottomBarLarge]}>
         <View style={styles.bottomBarInner}>
-          <TouchableOpacity 
-            style={[styles.addToCartBtn, currentVariantStock <= 0 && { opacity: 0.5 }]} 
+          <TouchableOpacity
+            style={[styles.addToCartBtn, currentVariantStock <= 0 && { opacity: 0.5 }]}
             onPress={handleAddToCart}
             disabled={currentVariantStock <= 0}
           >
@@ -872,8 +884,8 @@ export default function ProductDetailScreen() {
               {currentVariantStock <= 0 ? 'Tạm hết hàng' : 'Thêm vào giỏ'}
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.buyNowBtn, currentVariantStock <= 0 && { backgroundColor: '#94a3b8' }]} 
+          <TouchableOpacity
+            style={[styles.buyNowBtn, currentVariantStock <= 0 && { backgroundColor: '#94a3b8' }]}
             onPress={handleBuyNow}
             disabled={currentVariantStock <= 0}
           >
@@ -892,10 +904,10 @@ export default function ProductDetailScreen() {
         onRequestClose={() => setShowSizeGuide(false)}
       >
         <View style={styles.modalOverlay}>
-          <TouchableOpacity 
-            style={StyleSheet.absoluteFillObject} 
-            activeOpacity={1} 
-            onPress={() => setShowSizeGuide(false)} 
+          <TouchableOpacity
+            style={StyleSheet.absoluteFillObject}
+            activeOpacity={1}
+            onPress={() => setShowSizeGuide(false)}
           />
           <View style={[styles.reviewModalCard, { maxHeight: '90%', maxWidth: 540 }]}>
             <View style={styles.reviewModalHeader}>
@@ -967,14 +979,15 @@ export default function ProductDetailScreen() {
                   const recSize = getRecommendedSize(calcHeight, calcWeight, isShoe);
                   return (
                     <View style={styles.recResultBox}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <IconSymbol name="checkmark.circle.fill" size={20} color="#16a34a" />
-                        <Text style={{ fontSize: 14, fontWeight: '600', color: '#16a34a' }}>
-                          Size gợi ý cho bạn: <Text style={{ fontWeight: '800', fontSize: 16 }}>{recSize}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, flex: 1, minWidth: 130 }}>
+                        <IconSymbol name="checkmark.circle.fill" size={18} color="#16a34a" />
+                        <Text style={{ fontSize: 13.5, fontWeight: '600', color: '#16a34a' }}>
+                          Gợi ý: <Text style={{ fontWeight: '900', fontSize: 16, color: '#15803d' }}>Size {recSize}</Text>
                         </Text>
                       </View>
                       <TouchableOpacity
                         style={styles.applyRecSizeBtn}
+                        activeOpacity={0.8}
                         onPress={() => {
                           setSelectedSize(recSize);
                           setShowSizeGuide(false);
@@ -1000,10 +1013,10 @@ export default function ProductDetailScreen() {
         onRequestClose={() => setShowReviewModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <TouchableOpacity 
-            style={StyleSheet.absoluteFillObject} 
-            activeOpacity={1} 
-            onPress={() => setShowReviewModal(false)} 
+          <TouchableOpacity
+            style={StyleSheet.absoluteFillObject}
+            activeOpacity={1}
+            onPress={() => setShowReviewModal(false)}
           />
           <View style={styles.reviewModalCard}>
             {/* Modal Header */}
@@ -1034,14 +1047,14 @@ export default function ProductDetailScreen() {
                 alignItems: 'center',
                 gap: 8
               }}>
-                <IconSymbol 
-                  name={isEditingReview ? 'pencil' : 'checkmark.seal.fill'} 
-                  size={14} 
-                  color={isEditingReview ? '#b45309' : '#047857'} 
+                <IconSymbol
+                  name={isEditingReview ? 'pencil' : 'checkmark.seal.fill'}
+                  size={14}
+                  color={isEditingReview ? '#b45309' : '#047857'}
                 />
                 <Text style={{ fontSize: 12, color: isEditingReview ? '#92400e' : '#065f46', fontWeight: '600', flex: 1 }}>
-                  {isEditingReview 
-                    ? 'Bạn đang chỉnh sửa đánh giá trước đây (Mỗi khách hàng chỉ gửi 1 đánh giá).' 
+                  {isEditingReview
+                    ? 'Bạn đang chỉnh sửa đánh giá trước đây (Mỗi khách hàng chỉ gửi 1 đánh giá).'
                     : 'Xác thực người mua: Đơn hàng đã giao thành công.'}
                 </Text>
               </View>
@@ -1077,9 +1090,9 @@ export default function ProductDetailScreen() {
                 </View>
                 <Text style={styles.starRatingDesc}>
                   {newRating === 5 ? 'Tuyệt vời (5 sao)' :
-                   newRating === 4 ? 'Hài lòng (4 sao)' :
-                   newRating === 3 ? 'Bình thường (3 sao)' :
-                   newRating === 2 ? 'Không hài lòng (2 sao)' : 'Rất tệ (1 sao)'}
+                    newRating === 4 ? 'Hài lòng (4 sao)' :
+                      newRating === 3 ? 'Bình thường (3 sao)' :
+                        newRating === 2 ? 'Không hài lòng (2 sao)' : 'Rất tệ (1 sao)'}
                 </Text>
               </View>
 
@@ -1423,7 +1436,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     paddingTop: 4,
   },
-    sizeBoxSoldOut: {
+  sizeBoxSoldOut: {
     backgroundColor: '#f8fafc',
     borderColor: '#e2e8f0',
     opacity: 0.6,
@@ -2156,6 +2169,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 10,
     marginTop: 14,
     paddingTop: 12,
     borderTopWidth: 1,

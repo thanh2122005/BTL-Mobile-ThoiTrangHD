@@ -64,6 +64,7 @@ export default function ProductsScreen() {
   const itemWidth = isDesktop ? '23.5%' : isTablet ? '31%' : '48%';
   const columnGap = isDesktop ? '2%' : isTablet ? '3.5%' : '4%';
 
+  // [Chức năng UI: "Sắp xếp"] - Tùy chọn sắp xếp giá tăng/giảm, bán chạy, giảm giá nhiều
   const sortOptions: { label: string; value: SortOption }[] = [
     { label: 'Phổ biến nhất', value: 'default' },
     { label: 'Giá: Thấp đến Cao', value: 'price_asc' },
@@ -71,6 +72,7 @@ export default function ProductsScreen() {
     { label: 'Giảm giá nhiều nhất', value: 'discount' },
   ];
 
+  // [Chức năng UI: "Khoảng giá"] - Lọc theo các mức ngân sách
   const priceRangeOptions: { label: string; value: PriceRange }[] = [
     { label: 'Tất cả mức giá', value: 'all' },
     { label: 'Dưới 500.000đ', value: 'under_500' },
@@ -86,12 +88,14 @@ export default function ProductsScreen() {
     setShowFilterModal(true);
   };
 
+  // [Chức năng UI: "Áp dụng bộ lọc"] - Cập nhật danh sách theo bộ lọc đã chọn
   const handleApplyFilter = () => {
     setSortBy(tempSortBy);
     setPriceRange(tempPriceRange);
     setShowFilterModal(false);
   };
 
+  // [Chức năng UI: "Thiết lập lại"] - Đặt lại bộ lọc về trạng thái ban đầu
   const handleResetFilter = () => {
     setTempSortBy('default');
     setTempPriceRange('all');
@@ -100,6 +104,7 @@ export default function ProductsScreen() {
     setShowFilterModal(false);
   };
 
+  // [Chức năng UI: "Tìm kiếm & Lọc sản phẩm"] - Xử lý tìm kiếm theo tên, danh mục và giá tiền
   const processedProducts = useMemo(() => {
     let list = products.filter(p => {
       // 1. Phân loại danh mục
@@ -120,14 +125,32 @@ export default function ProductsScreen() {
       return matchesCategory && matchesSearch && matchesPrice;
     });
 
-    // 4. Sắp xếp
-    if (sortBy === 'price_asc') {
-      list.sort((a, b) => (Number(a.price) || 0) - (Number(b.price) || 0));
-    } else if (sortBy === 'price_desc') {
-      list.sort((a, b) => (Number(b.price) || 0) - (Number(a.price) || 0));
-    } else if (sortBy === 'discount') {
-      list.sort((a, b) => (Number(b.discount) || 0) - (Number(a.discount) || 0));
-    }
+    // 4. Sắp xếp: Ưu tiên còn hàng (stock > 0) lên trước, chuyển sp hết hàng xuống cuối
+    list.sort((a, b) => {
+      const aInStock = (Number(a.stock) || 0) > 0 ? 1 : 0;
+      const bInStock = (Number(b.stock) || 0) > 0 ? 1 : 0;
+      if (aInStock !== bInStock) {
+        return bInStock - aInStock; // Còn hàng luôn đứng trước
+      }
+
+      // Đẩy sản phẩm mẫu cũ ID 1 và 2 ra sau các sản phẩm khác
+      const aIsOldSample = (a.id === 1 || a.id === '1' || a.id === 2 || a.id === '2') ? 1 : 0;
+      const bIsOldSample = (b.id === 1 || b.id === '1' || b.id === 2 || b.id === '2') ? 1 : 0;
+      if (aIsOldSample !== bIsOldSample) {
+        return aIsOldSample - bIsOldSample;
+      }
+
+      if (sortBy === 'price_asc') {
+        return (Number(a.price) || 0) - (Number(b.price) || 0);
+      } else if (sortBy === 'price_desc') {
+        return (Number(b.price) || 0) - (Number(a.price) || 0);
+      } else if (sortBy === 'discount') {
+        return (Number(b.discount) || 0) - (Number(a.discount) || 0);
+      }
+
+      // Mặc định: Ưu tiên bán chạy nhất (sold_count)
+      return (Number(b.sold_count) || 0) - (Number(a.sold_count) || 0);
+    });
 
     return list;
   }, [products, activeFilter, searchQuery, priceRange, sortBy]);
