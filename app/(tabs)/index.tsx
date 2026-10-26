@@ -47,7 +47,7 @@ export default function HomeScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
   const categories = ['Tất cả', 'Áo', 'Quần', 'Váy', 'Bộ', 'Phụ kiện', 'Giày'];
 
-  // Thống kê số lượng sản phẩm theo từng danh mục
+  // [Chức năng UI: "Danh mục sản phẩm"] - Thống kê số lượng sản phẩm theo từng danh mục
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = { 'Tất cả': products.length };
     products.forEach((p) => {
@@ -66,7 +66,7 @@ export default function HomeScreen() {
   const maxHomeItems = isDesktop ? 8 : 6;
   const displayProducts = filteredProducts.slice(0, maxHomeItems);
 
-  // Nổi bật: Ưu tiên bán chạy nhất (sold_count) và giảm giá sâu nhất (discount)
+  // [Chức năng UI: "Sản phẩm nổi bật"] - Ưu tiên bán chạy nhất (sold_count) và giảm giá sâu nhất (discount)
   const featuredProducts = [...products]
     .sort((a, b) => {
       if ((b.sold_count || 0) !== (a.sold_count || 0)) {
@@ -76,12 +76,20 @@ export default function HomeScreen() {
     })
     .slice(0, 6);
 
-  // Hàng mới về: Sắp xếp theo ngày tạo mới nhất (created_at)
+  // [Chức năng UI: "Hàng mới về"] - Sắp xếp theo còn hàng và ngày tạo mới nhất (created_at)
   const newArrivals = (activeCategory === 'Tất cả'
     ? products
     : products.filter((p) => p.category === activeCategory)
   )
-    .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+    .sort((a, b) => {
+      const aInStock = (Number(a.stock) || 0) > 0 ? 1 : 0;
+      const bInStock = (Number(b.stock) || 0) > 0 ? 1 : 0;
+      if (aInStock !== bInStock) return bInStock - aInStock;
+      const aIsOldSample = (a.id === 1 || a.id === '1' || a.id === 2 || a.id === '2') ? 1 : 0;
+      const bIsOldSample = (b.id === 1 || b.id === '1' || b.id === 2 || b.id === '2') ? 1 : 0;
+      if (aIsOldSample !== bIsOldSample) return aIsOldSample - bIsOldSample;
+      return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+    })
     .slice(0, isDesktop ? 16 : 10);
 
   return (
@@ -93,9 +101,11 @@ export default function HomeScreen() {
             {isLargeScreen && <Text style={styles.greetingText}>Chào mừng bạn đến với ThoiTrangHD!</Text>}
           </View>
           <View style={styles.headerRight}>
+            {/* [Chức năng UI: "Tìm kiếm sản phẩm"] - Chuyển sang màn hình tìm kiếm */}
             <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/products')}>
               <IconSymbol name="magnifyingglass" size={isMobile ? 22 : 24} color="#1a1c1c" />
             </TouchableOpacity>
+            {/* [Chức năng UI: "Giỏ hàng"] - Mở giỏ hàng kèm số lượng badge */}
             <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/cart')}>
               <IconSymbol name="bag" size={isMobile ? 22 : 24} color="#1a1c1c" />
               {itemCount > 0 && (
@@ -110,7 +120,7 @@ export default function HomeScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, isMobile && { paddingHorizontal: 14, paddingTop: 12 }]}>
 
-                {/* Banner */}
+        {/* [Chức năng UI: "Banner khuyến mãi"] */}
         <View style={[styles.bannerContainer, { height: isDesktop ? 460 : isTablet ? 320 : 190, marginBottom: isMobile ? 18 : 32 }]}>
           <Image
             source={require('@/assets/images/banner_fashion_hd.jpg')}
