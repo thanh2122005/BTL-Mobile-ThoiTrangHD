@@ -88,6 +88,7 @@ export default function CartScreen() {
   }, []);
   const [voucherMsg, setVoucherMsg] = useState<{ text: string; isError: boolean } | null>(null);
 
+  // Tính số tiền được giảm giá của một voucher (theo % hoặc trừ tiền trực tiếp)
   const calcSavings = (v: any) => {
     const isPercent = v.discount_type === 'percent' || v.discountType === 'percent';
     if (isPercent) {
@@ -96,21 +97,25 @@ export default function CartScreen() {
     return Math.min(Number(v.value), subtotalPrice);
   };
 
+  // Lọc ra các voucher thỏa mãn điều kiện đơn hàng tối thiểu (min_spend) và sắp xếp ưu tiên voucher giảm nhiều nhất
   const eligibleVouchers = availableVouchers
     .filter((v) => subtotalPrice >= (v.min_spend || 0))
     .sort((a, b) => calcSavings(b) - calcSavings(a));
 
+  // Tự động tìm voucher giảm giá tốt nhất cho khách hàng
   const bestVoucher = eligibleVouchers.length > 0 ? eligibleVouchers[0] : null;
   const bestSavings = bestVoucher ? calcSavings(bestVoucher) : 0;
 
-
   const formatVND = (num: number) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(num);
 
+  // Áp dụng mã giảm giá nhập tay
   const handleApplyVoucher = async () => {
     const res = await applyVoucher(inputCode, user?.id);
     setVoucherMsg({ text: res.message, isError: !res.success });
     if (res.success) setInputCode('');
   };
+
+  // Kiểm tra sản phẩm có đang được tick chọn để thanh toán hay không
   const isItemSelected = (item: any) => {
     const itemKey = item.cartItemId || `${item.id}_${item.size || 'M'}_${item.color || 'default'}`;
     return (
@@ -119,6 +124,7 @@ export default function CartScreen() {
       selectedItemIds.includes(item.id)
     );
   };
+  // Kiểm tra xem tất cả sản phẩm trong giỏ đã được chọn hết chưa
   const isAllSelected = cart.length > 0 && cart.every((it) => isItemSelected(it));
 
 
@@ -284,14 +290,25 @@ export default function CartScreen() {
                         />
                       </TouchableOpacity>
 
-                      <View style={[styles.itemImageContainer, isMobile && { width: 82, height: 104 }]}>
+                      <TouchableOpacity
+                        style={[styles.itemImageContainer, isMobile && { width: 82, height: 104 }]}
+                        activeOpacity={0.8}
+                        onPress={() => router.push(`/products/${item.id}`)}
+                      >
                         <Image source={imageSource} style={styles.itemImage} contentFit="cover" />
-                      </View>
+                      </TouchableOpacity>
                       
                       <View style={styles.itemDetails}>
                         <View style={styles.itemHeader}>
                           <View style={[styles.itemTitleContainer, isMobile && { paddingRight: 8 }]}>
-                            <Text style={[styles.itemName, isMobile && { fontSize: 14, lineHeight: 20 }]} numberOfLines={2}>{item.name}</Text>
+                            <TouchableOpacity
+                              activeOpacity={0.7}
+                              onPress={() => router.push(`/products/${item.id}`)}
+                            >
+                              <Text style={[styles.itemName, isMobile && { fontSize: 14, lineHeight: 20 }]} numberOfLines={2}>
+                                {item.name}
+                              </Text>
+                            </TouchableOpacity>
                             <TouchableOpacity
                               style={styles.variantSelectorChip}
                               onPress={() => handleOpenVariantModal(item)}

@@ -1,4 +1,4 @@
-﻿import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { Platform } from 'react-native';
 import { API_URL } from '@/constants/config';
 
@@ -117,6 +117,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   }, [items]);
 
+  // [Chức năng: "Thêm vào giỏ hàng"] - Thêm sản phẩm hoặc tăng số lượng nếu đã có cùng size/màu trong giỏ
   const addToCart = (product: Product) => {
     const cartItemId = getCartItemId(product);
     const addQty = product.quantity && product.quantity > 0 ? product.quantity : 1;
@@ -153,11 +154,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  // [Chức năng: "Xóa khỏi giỏ hàng"] - Xóa 1 sản phẩm cụ thể ra khỏi danh sách giỏ hàng
   const removeFromCart = (cartItemIdOrId: string) => {
     setItems((prev) => prev.filter((item) => item.cartItemId !== cartItemIdOrId && item.id !== cartItemIdOrId));
     setSelectedItemIds((prev) => prev.filter((id) => id !== cartItemIdOrId));
   };
 
+  // [Chức năng: "Tăng số lượng"] - Tăng số lượng và kiểm tra không vượt quá tồn kho (stock)
   const increaseQuantity = (cartItemIdOrId: string) => {
     setItems((prev) =>
       prev.map((item) => {
@@ -172,6 +175,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     );
   };
 
+  // [Chức năng: "Giảm số lượng"] - Giảm số lượng mua (tối thiểu là 1)
   const decreaseQuantity = (cartItemIdOrId: string) => {
     setItems((prev) =>
       prev.map((item) => {

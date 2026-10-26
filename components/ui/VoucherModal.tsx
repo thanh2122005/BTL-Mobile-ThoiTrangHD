@@ -35,6 +35,7 @@ interface VoucherModalProps {
 const formatVND = (num: number) =>
   new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(num);
 
+// [Chức năng UI: "Chọn Mã Giảm Giá"] - Quy đổi mọi loại voucher (% hoặc tiền mặt) ra số tiền giảm thực tế (VNĐ)
 export const calcVoucherSavings = (v: Voucher, subtotal: number): number => {
   const isPercent = v.discount_type === 'percent' || v.discountType === 'percent';
   if (isPercent) {
@@ -104,14 +105,15 @@ export const VoucherModal: React.FC<VoucherModalProps> = ({
     }
   };
 
-  // Best savings voucher first
+  // [Chức năng UI: "Gợi ý mã giảm nhiều nhất"] - Lọc voucher đủ điều kiện đơn tối thiểu và sắp xếp giảm dần (voucher tốt nhất lên đầu)
   const eligibleVouchers = vouchers
-    .filter((v) => subtotalPrice >= (v.min_spend || 0))
-    .sort((a, b) => calcVoucherSavings(b, subtotalPrice) - calcVoucherSavings(a, subtotalPrice));
+    .filter((v) => subtotalPrice >= (v.min_spend || 0)) // 1. Lọc đơn đủ điều kiện tối thiểu
+    .sort((a, b) => calcVoucherSavings(b, subtotalPrice) - calcVoucherSavings(a, subtotalPrice)); // 2. Sắp xếp b - a: giảm nhiều nhất đứng đầu tiên
 
+  // Số tiền giảm tối đa của voucher tốt nhất (vị trí đầu tiên)
   const maxSavings = eligibleVouchers.length > 0 ? calcVoucherSavings(eligibleVouchers[0], subtotalPrice) : 0;
 
-  // Ineligible vouchers below
+  // Danh sách các voucher chưa đủ điều kiện chi tiêu tối thiểu (hiển thị mờ ở phía dưới để nhắc khách mua thêm)
   const ineligibleVouchers = vouchers
     .filter((v) => subtotalPrice < (v.min_spend || 0))
     .sort((a, b) => (a.min_spend || 0) - (b.min_spend || 0));
