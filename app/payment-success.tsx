@@ -23,6 +23,7 @@ export default function PaymentSuccessScreen() {
   const displayTotal = rawTotal > 0 ? `${rawTotal.toLocaleString('vi-VN')}₫` : '0₫';
   const isBankPayment = paymentMethod === 'bank' || paymentMethod === 'banking' || paymentMethod === 'vietqr';
 
+  // Thông tin tài khoản ngân hàng của cửa hàng
   const bankInfo = {
     bankName: 'MB Bank (Ngân hàng Quân Đội)',
     accountNumber: '0988776655',
@@ -261,8 +262,8 @@ export default function PaymentSuccessScreen() {
               }
             }}
           >
-            <IconSymbol name="doc.plaintext" size={20} color="#000000" />
-            <Text style={styles.viewOrderText}>Xem chi tiết đơn hàng</Text>
+            <IconSymbol name="printer" size={20} color="#000000" />
+            <Text style={styles.viewOrderText}>Xem chi tiết đơn & In hóa đơn</Text>
           </TouchableOpacity>
           
           <TouchableOpacity style={styles.continueShoppingBtn} onPress={() => router.push('/')}>

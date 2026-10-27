@@ -1,5 +1,6 @@
 import { VoucherModal } from '@/components/ui/VoucherModal';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { VIETNAM_PROVINCES, getProvinces, getDistricts, getWards } from '@/constants/vietnamLocations';
 import {
   StyleSheet,
   View,
@@ -101,7 +102,110 @@ export default function CheckoutScreen() {
   const [customerName, setCustomerName] = useState(user?.name || '');
   const [customerPhone, setCustomerPhone] = useState(user?.phone || '');
   const [customerAddress, setCustomerAddress] = useState(user?.address || '');
-  const [formErrors, setFormErrors] = useState<{ name?: string; phone?: string; address?: string }>({});
+  const [formErrors, setFormErrors] = useState<{ 
+    name?: string; 
+    phone?: string; 
+    address?: string;
+    province?: string;
+    district?: string;
+    ward?: string;
+    street?: string;
+  }>({});
+
+  // [Chức năng UI: "Địa chỉ giao hàng chuẩn hóa"] - Khách hàng chọn Tỉnh/TP, Quận/Huyện, Phường/Xã và nhập Số nhà/Tên đường
+  const [selectedProvince, setSelectedProvince] = useState<string>('TP. Hà Nội');
+  const [selectedDistrict, setSelectedDistrict] = useState<string>('Quận Cầu Giấy');
+  const [selectedWard, setSelectedWard] = useState<string>('Phường Dịch Vọng Hậu');
+  const [streetAddress, setStreetAddress] = useState<string>('');
+  const [locationPickerType, setLocationPickerType] = useState<'province' | 'district' | 'ward' | null>(null);
+  const [locationSearchText, setLocationSearchText] = useState<string>('');
+
+  // [Danh mục Tỉnh/Quận/Xã tải động từ API 63 Tỉnh Thành]
+  const [provinceList, setProvinceList] = useState<any[]>(VIETNAM_PROVINCES);
+  const [districtList, setDistrictList] = useState<any[]>([]);
+  const [wardList, setWardList] = useState<string[]>([]);
+  const [isLoadingLocations, setIsLoadingLocations] = useState<boolean>(false);
+
+  useEffect(() => {
+    getProvinces().then((provs) => {
+      if (provs && provs.length > 0) {
+        setProvinceList(provs);
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    if (selectedProvince) {
+      setIsLoadingLocations(true);
+      getDistricts(selectedProvince).then((dists) => {
+        setDistrictList(dists);
+        setIsLoadingLocations(false);
+      });
+    }
+  }, [selectedProvince]);
+
+  useEffect(() => {
+    if (selectedDistrict && selectedProvince) {
+      getWards(selectedDistrict, selectedProvince).then((wards) => {
+        setWardList(wards);
+      });
+    }
+  }, [selectedDistrict, selectedProvince]);
+
+  const currentDistricts = useMemo(() => {
+    if (districtList && districtList.length > 0) return districtList;
+    const prov = VIETNAM_PROVINCES.find((p) => p.name === selectedProvince) || VIETNAM_PROVINCES[0];
+    return prov ? prov.districts : [];
+  }, [districtList, selectedProvince]);
+
+  const currentWards = useMemo<string[]>(() => {
+    if (wardList && wardList.length > 0) return wardList;
+    const dist = currentDistricts.find((d: any) => d.name === selectedDistrict);
+    return dist && dist.wards ? dist.wards : [];
+  }, [wardList, currentDistricts, selectedDistrict]);
+
+  const computedFullAddress = useMemo(() => {
+    const parts: string[] = [];
+    if (streetAddress.trim()) parts.push(streetAddress.trim());
+    if (selectedWard) parts.push(selectedWard);
+    if (selectedDistrict) parts.push(selectedDistrict);
+    if (selectedProvince) parts.push(selectedProvince);
+    return parts.join(', ');
+  }, [streetAddress, selectedWard, selectedDistrict, selectedProvince]);
+
+  const parseAndSetAddress = (addrString: string) => {
+    if (!addrString) return;
+    setCustomerAddress(addrString);
+    const parts = addrString.split(',').map((s) => s.trim());
+    if (parts.length >= 4) {
+      const provStr = parts[parts.length - 1];
+      const distStr = parts[parts.length - 2];
+      const wardStr = parts[parts.length - 3];
+      const streetStr = parts.slice(0, parts.length - 3).join(', ');
+
+      const matchedProv = VIETNAM_PROVINCES.find(
+        (p) => p.name.toLowerCase() === provStr.toLowerCase() || provStr.toLowerCase().includes(p.name.replace(/^(TP\.|Tỉnh)\s*/i, '').toLowerCase())
+      );
+      if (matchedProv) {
+        setSelectedProvince(matchedProv.name);
+        const matchedDist = matchedProv.districts.find(
+          (d) => d.name.toLowerCase() === distStr.toLowerCase() || distStr.toLowerCase().includes(d.name.replace(/^(Quận|Huyện|TP\.)\s*/i, '').toLowerCase())
+        );
+        if (matchedDist) {
+          setSelectedDistrict(matchedDist.name);
+          const matchedWard = matchedDist.wards.find(
+            (w) => w.toLowerCase() === wardStr.toLowerCase() || wardStr.toLowerCase().includes(w.replace(/^(Phường|Xã|Thị trấn)\s*/i, '').toLowerCase())
+          );
+          if (matchedWard) {
+            setSelectedWard(matchedWard);
+          }
+        }
+      }
+      setStreetAddress(streetStr || parts[0]);
+    } else {
+      setStreetAddress(addrString);
+    }
+  };
 
   const saveDeliveryInfoToStorage = (name: string, phone: string, address: string) => {
     if (Platform.OS === 'web' && typeof window !== 'undefined' && window.localStorage) {
@@ -120,7 +224,9 @@ export default function CheckoutScreen() {
           const p = JSON.parse(saved);
           if (!customerName && p.name) setCustomerName(p.name);
           if (!customerPhone && p.phone) setCustomerPhone(p.phone);
-          if (!customerAddress && p.address) setCustomerAddress(p.address);
+          if (p.address) {
+            parseAndSetAddress(p.address);
+          }
         }
         const savedList = window.localStorage.getItem('THOITRANGHD_ADDRESS_BOOK');
         if (savedList) {
@@ -147,35 +253,71 @@ export default function CheckoutScreen() {
     if (user) {
       if (!customerName && user.name) setCustomerName(user.name);
       if (!customerPhone && user.phone) setCustomerPhone(user.phone);
-      if (!customerAddress && user.address) setCustomerAddress(user.address);
+      if (user.address && !customerAddress) {
+        parseAndSetAddress(user.address);
+      }
     }
   }, [user]);
 
+  // [Chức năng UI: "Thông tin nhận hàng"] - Ràng buộc chuẩn: Tỉnh/TP, Quận/Huyện, Phường/Xã phải chọn, chỉ nhập Số nhà/Đường
   const validateForm = () => {
-    const errors: { name?: string; phone?: string; address?: string } = {};
+    const errors: { 
+      name?: string; 
+      phone?: string; 
+      address?: string;
+      province?: string;
+      district?: string;
+      ward?: string;
+      street?: string;
+    } = {};
+
     if (!customerName.trim()) errors.name = 'Vui lòng nhập họ và tên người nhận';
     if (!customerPhone.trim()) {
       errors.phone = 'Vui lòng nhập số điện thoại';
     } else if (!/^(0[0-9]{9,10})$/.test(customerPhone.trim())) {
       errors.phone = 'Số điện thoại không hợp lệ (VD: 0912345678)';
     }
-    if (!customerAddress.trim()) errors.address = 'Vui lòng nhập địa chỉ giao hàng';
-    else if (customerAddress.trim().length < 8)
-      errors.address = 'Địa chỉ cần ghi rõ số nhà, tên đường, phường/xã, quận/huyện';
+
+    if (!selectedProvince) {
+      errors.province = 'Vui lòng chọn Tỉnh/Thành phố';
+    }
+    if (!selectedDistrict) {
+      errors.district = 'Vui lòng chọn Quận/Huyện';
+    }
+    if (!selectedWard) {
+      errors.ward = 'Vui lòng chọn Phường/Xã';
+    }
+    if (!streetAddress.trim()) {
+      errors.street = 'Vui lòng nhập số nhà, tên đường hoặc tòa nhà';
+    } else if (streetAddress.trim().length < 3) {
+      errors.street = 'Số nhà, tên đường cần ghi rõ ràng (tối thiểu 3 ký tự)';
+    }
+
+    if (errors.province || errors.district || errors.ward || errors.street) {
+      errors.address = 'Vui lòng chọn Tỉnh/TP, Quận/Huyện, Xã/Phường và nhập số nhà cụ thể';
+    }
+
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
+  // [Chức năng UI: "Đặt hàng"] - Xử lý gửi đơn hàng lên máy chủ (POST /api/orders)
   const handlePlaceOrder = async () => {
+    // Nếu thông tin giao hàng chưa hợp lệ thì mở modal yêu cầu nhập lại
     if (!validateForm()) {
       setShowAddressModal(true);
       return;
     }
     if (cart.length === 0) return;
 
-    saveDeliveryInfoToStorage(customerName, customerPhone, customerAddress);
+    const fullAddr = computedFullAddress;
+    setCustomerAddress(fullAddr);
+
+    // Lưu lại thông tin giao hàng vào bộ nhớ để lần sau không cần nhập lại
+    saveDeliveryInfoToStorage(customerName, customerPhone, fullAddr);
     setIsSubmitting(true);
     try {
+      // Gửi yêu cầu tạo đơn hàng với đầy đủ thông tin sản phẩm, voucher và phí vận chuyển
       const res = await fetch(`${API_URL}/api/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -205,12 +347,14 @@ export default function CheckoutScreen() {
       if (!res.ok || !data.success) {
         throw new Error(data.message || 'Không thể tạo đơn hàng');
       }
+      // Xóa các sản phẩm đã đặt khỏi giỏ hàng
       if (clearSelectedItems) {
         clearSelectedItems();
       } else {
         clearCart();
       }
 
+      // Điều hướng sang màn hình thông báo đặt hàng thành công (hiển thị mã VietQR nếu chọn chuyển khoản)
       const orderCode = data.orderCode || 'N/A';
       router.replace(`/payment-success?orderCode=${orderCode}&total=${data.totalPrice || totalPrice}&paymentMethod=${paymentMethod}`);
     } catch (err: any) {
@@ -806,23 +950,120 @@ export default function CheckoutScreen() {
                 {formErrors.phone && <Text style={styles.errorText}>{formErrors.phone}</Text>}
               </View>
 
+              {/* Bộ chọn Tỉnh/Thành phố (Bắt buộc chọn) */}
               <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>
-                  Địa chỉ chi tiết <Text style={styles.required}>*</Text>
+                  Tỉnh / Thành phố <Text style={styles.required}>* (Chọn từ danh mục)</Text>
                 </Text>
+                <TouchableOpacity
+                  style={[styles.locationPickerBtn, formErrors.province ? styles.formInputError : null]}
+                  onPress={() => {
+                    setLocationSearchText('');
+                    setLocationPickerType('province');
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                    <IconSymbol name="building.columns" size={16} color="#b78103" />
+                    <Text style={selectedProvince ? styles.locationPickerBtnText : styles.locationPickerBtnPlaceholder} numberOfLines={1}>
+                      {selectedProvince || 'Nhấn để chọn Tỉnh/Thành phố'}
+                    </Text>
+                  </View>
+                  <IconSymbol name="chevron.right" size={14} color="#94a3b8" />
+                </TouchableOpacity>
+                {formErrors.province && <Text style={styles.errorText}>{formErrors.province}</Text>}
+              </View>
+
+              {/* Bộ chọn Quận/Huyện (Bắt buộc chọn) */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>
+                  Quận / Huyện <Text style={styles.required}>* (Chọn từ danh mục)</Text>
+                </Text>
+                <TouchableOpacity
+                  style={[
+                    styles.locationPickerBtn, 
+                    formErrors.district ? styles.formInputError : null,
+                    !selectedProvince && { opacity: 0.6, backgroundColor: '#f1f5f9' }
+                  ]}
+                  onPress={() => {
+                    if (!selectedProvince) return;
+                    setLocationSearchText('');
+                    setLocationPickerType('district');
+                  }}
+                  disabled={!selectedProvince}
+                  activeOpacity={0.7}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                    <IconSymbol name="map" size={16} color="#b78103" />
+                    <Text style={selectedDistrict ? styles.locationPickerBtnText : styles.locationPickerBtnPlaceholder} numberOfLines={1}>
+                      {selectedDistrict || (selectedProvince ? 'Nhấn để chọn Quận/Huyện' : 'Vui lòng chọn Tỉnh/TP trước')}
+                    </Text>
+                  </View>
+                  <IconSymbol name="chevron.right" size={14} color="#94a3b8" />
+                </TouchableOpacity>
+                {formErrors.district && <Text style={styles.errorText}>{formErrors.district}</Text>}
+              </View>
+
+              {/* Bộ chọn Phường/Xã (Bắt buộc chọn) */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>
+                  Phường / Xã <Text style={styles.required}>* (Chọn từ danh mục)</Text>
+                </Text>
+                <TouchableOpacity
+                  style={[
+                    styles.locationPickerBtn, 
+                    formErrors.ward ? styles.formInputError : null,
+                    !selectedDistrict && { opacity: 0.6, backgroundColor: '#f1f5f9' }
+                  ]}
+                  onPress={() => {
+                    if (!selectedDistrict) return;
+                    setLocationSearchText('');
+                    setLocationPickerType('ward');
+                  }}
+                  disabled={!selectedDistrict}
+                  activeOpacity={0.7}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                    <IconSymbol name="signpost.right" size={16} color="#b78103" />
+                    <Text style={selectedWard ? styles.locationPickerBtnText : styles.locationPickerBtnPlaceholder} numberOfLines={1}>
+                      {selectedWard || (selectedDistrict ? 'Nhấn để chọn Phường/Xã' : 'Vui lòng chọn Quận/Huyện trước')}
+                    </Text>
+                  </View>
+                  <IconSymbol name="chevron.right" size={14} color="#94a3b8" />
+                </TouchableOpacity>
+                {formErrors.ward && <Text style={styles.errorText}>{formErrors.ward}</Text>}
+              </View>
+
+              {/* Ô nhập Số nhà / Tên đường (Ô DUY NHẤT khách được gõ tay) */}
+              <View style={styles.formGroup}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <Text style={styles.formLabel}>
+                    Số nhà, tên ngõ/đường, tòa nhà <Text style={styles.required}>*</Text>
+                  </Text>
+                  <Text style={styles.inputGuideNote}>Chỉ nhập số nhà & tên đường</Text>
+                </View>
                 <TextInput
-                  style={[styles.formInput, styles.formTextArea, formErrors.address ? styles.formInputError : null]}
-                  placeholder="Số nhà, ngõ/ngách, tên đường, phường/xã, quận/huyện, tỉnh/TP"
+                  style={[styles.formInput, formErrors.street ? styles.formInputError : null]}
+                  placeholder="VD: Số 18 Hoàng Quốc Việt hoặc Tòa CT2, ngõ 12"
                   placeholderTextColor="#94a3b8"
-                  multiline
-                  numberOfLines={3}
-                  value={customerAddress}
+                  value={streetAddress}
                   onChangeText={(val) => {
-                    setCustomerAddress(val);
-                    if (formErrors.address) setFormErrors((p) => ({ ...p, address: undefined }));
+                    setStreetAddress(val);
+                    if (formErrors.street) setFormErrors((p) => ({ ...p, street: undefined, address: undefined }));
                   }}
                 />
-                {formErrors.address && <Text style={styles.errorText}>{formErrors.address}</Text>}
+                {formErrors.street && <Text style={styles.errorText}>{formErrors.street}</Text>}
+              </View>
+
+              {/* Khối Xem trước Địa chỉ Hoàn chỉnh */}
+              <View style={styles.addressPreviewCard}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <IconSymbol name="checkmark.circle.fill" size={14} color="#16a34a" />
+                  <Text style={styles.addressPreviewTitle}>Địa chỉ giao hàng hoàn chỉnh chuẩn tuyến:</Text>
+                </View>
+                <Text style={styles.addressPreviewText}>
+                  {computedFullAddress || 'Vui lòng chọn đủ Xã/Phường, Quận/Huyện, Tỉnh/TP và nhập số nhà...'}
+                </Text>
               </View>
             </ScrollView>
 
@@ -832,8 +1073,10 @@ export default function CheckoutScreen() {
                   style={[styles.saveAddressBtn, { flex: 1, backgroundColor: '#f1f5f9' }]}
                   onPress={() => {
                     if (validateForm()) {
-                      saveToAddressBook('Nhà riêng', customerName, customerPhone, customerAddress);
-                      saveDeliveryInfoToStorage(customerName, customerPhone, customerAddress);
+                      const fullAddr = computedFullAddress;
+                      setCustomerAddress(fullAddr);
+                      saveToAddressBook('Nhà riêng', customerName, customerPhone, fullAddr);
+                      saveDeliveryInfoToStorage(customerName, customerPhone, fullAddr);
                       setShowAddressModal(false);
                     }
                   }}
@@ -844,7 +1087,9 @@ export default function CheckoutScreen() {
                   style={[styles.saveAddressBtn, { flex: 1 }]}
                   onPress={() => {
                     if (validateForm()) {
-                      saveDeliveryInfoToStorage(customerName, customerPhone, customerAddress);
+                      const fullAddr = computedFullAddress;
+                      setCustomerAddress(fullAddr);
+                      saveDeliveryInfoToStorage(customerName, customerPhone, fullAddr);
                       setShowAddressModal(false);
                     }
                   }}
@@ -853,6 +1098,138 @@ export default function CheckoutScreen() {
                 </TouchableOpacity>
               </View>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Sub-modal: Hộp thoại Chọn Tỉnh/TP - Quận/Huyện - Phường/Xã có tìm kiếm nhanh */}
+      <Modal
+        visible={!!locationPickerType}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setLocationPickerType(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.locationSelectorCard}>
+            <View style={styles.locationSelectorHeader}>
+              <Text style={styles.locationSelectorTitle}>
+                {locationPickerType === 'province'
+                  ? 'Chọn Tỉnh / Thành phố'
+                  : locationPickerType === 'district'
+                  ? `Chọn Quận / Huyện (${selectedProvince})`
+                  : `Chọn Phường / Xã (${selectedDistrict})`}
+              </Text>
+              <TouchableOpacity onPress={() => setLocationPickerType(null)} style={styles.closeBtn}>
+                <IconSymbol name="xmark" size={20} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Ô tìm kiếm nhanh địa danh */}
+            <View style={styles.locationSearchContainer}>
+              <IconSymbol name="magnifyingglass" size={16} color="#94a3b8" />
+              <TextInput
+                style={styles.locationSearchInput}
+                placeholder="Tìm kiếm nhanh tên khu vực..."
+                placeholderTextColor="#94a3b8"
+                value={locationSearchText}
+                onChangeText={setLocationSearchText}
+                autoFocus={true}
+              />
+              {locationSearchText.length > 0 && (
+                <TouchableOpacity onPress={() => setLocationSearchText('')}>
+                  <IconSymbol name="xmark.circle.fill" size={16} color="#cbd5e1" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Danh sách các mục lựa chọn chuẩn */}
+            <ScrollView style={styles.locationItemsScroll} showsVerticalScrollIndicator={true}>
+              {(() => {
+                const query = locationSearchText.trim().toLowerCase();
+                if (locationPickerType === 'province') {
+                  const filtered = (provinceList.length > 0 ? provinceList : VIETNAM_PROVINCES).filter((p) => p.name.toLowerCase().includes(query));
+                  return filtered.map((p) => {
+                    const isSelected = selectedProvince === p.name;
+                    return (
+                      <TouchableOpacity
+                        key={p.name}
+                        style={[styles.locationItemRow, isSelected && styles.locationItemRowActive]}
+                        onPress={() => {
+                          setSelectedProvince(p.name);
+                          setSelectedDistrict('');
+                          setSelectedWard('');
+                          setLocationPickerType(null);
+                          setFormErrors((prev) => ({ ...prev, province: undefined, district: undefined, ward: undefined }));
+                          getDistricts(p.name).then((dists) => {
+                            setDistrictList(dists);
+                            if (dists.length > 0) {
+                              setSelectedDistrict(dists[0].name);
+                              getWards(dists[0].name, p.name).then((wList) => {
+                                setWardList(wList);
+                                if (wList.length > 0) setSelectedWard(wList[0]);
+                              });
+                            }
+                          });
+                        }}
+                      >
+                        <Text style={[styles.locationItemText, isSelected && styles.locationItemTextActive]}>
+                          {p.name}
+                        </Text>
+                        {isSelected && <IconSymbol name="checkmark" size={16} color="#b78103" />}
+                      </TouchableOpacity>
+                    );
+                  });
+                } else if (locationPickerType === 'district') {
+                  const filtered = currentDistricts.filter((d) => d.name.toLowerCase().includes(query));
+                  return filtered.map((d) => {
+                    const isSelected = selectedDistrict === d.name;
+                    return (
+                      <TouchableOpacity
+                        key={d.name}
+                        style={[styles.locationItemRow, isSelected && styles.locationItemRowActive]}
+                        onPress={() => {
+                          setSelectedDistrict(d.name);
+                          setSelectedWard('');
+                          setLocationPickerType(null);
+                          setFormErrors((prev) => ({ ...prev, district: undefined, ward: undefined }));
+                          getWards(d.name, selectedProvince).then((wList) => {
+                            setWardList(wList);
+                            if (wList.length > 0) setSelectedWard(wList[0]);
+                          });
+                        }}
+                      >
+                        <Text style={[styles.locationItemText, isSelected && styles.locationItemTextActive]}>
+                          {d.name}
+                        </Text>
+                        {isSelected && <IconSymbol name="checkmark" size={16} color="#b78103" />}
+                      </TouchableOpacity>
+                    );
+                  });
+                } else if (locationPickerType === 'ward') {
+                  const filtered = currentWards.filter((w: string) => w.toLowerCase().includes(query));
+                  return filtered.map((w: string) => {
+                    const isSelected = selectedWard === w;
+                    return (
+                      <TouchableOpacity
+                        key={w}
+                        style={[styles.locationItemRow, isSelected && styles.locationItemRowActive]}
+                        onPress={() => {
+                          setSelectedWard(w);
+                          setLocationPickerType(null);
+                          setFormErrors((prev) => ({ ...prev, ward: undefined }));
+                        }}
+                      >
+                        <Text style={[styles.locationItemText, isSelected && styles.locationItemTextActive]}>
+                          {w}
+                        </Text>
+                        {isSelected && <IconSymbol name="checkmark" size={16} color="#b78103" />}
+                      </TouchableOpacity>
+                    );
+                  });
+                }
+                return null;
+              })()}
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -1898,5 +2275,116 @@ const styles = StyleSheet.create({
   variantSizeTextSelected: {
     color: '#b78103',
     fontWeight: '700',
+  },
+  locationPickerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: '#f8fafc',
+  },
+  locationPickerBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0f172a',
+  },
+  locationPickerBtnPlaceholder: {
+    fontSize: 14,
+    color: '#94a3b8',
+  },
+  inputGuideNote: {
+    fontSize: 11,
+    color: '#64748b',
+    fontStyle: 'italic',
+  },
+  addressPreviewCard: {
+    backgroundColor: '#fefce8',
+    borderWidth: 1,
+    borderColor: '#fef08a',
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 6,
+    marginBottom: 8,
+  },
+  addressPreviewTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#854d0e',
+  },
+  addressPreviewText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1e293b',
+    lineHeight: 19,
+  },
+  locationSelectorCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 480,
+    height: 520,
+    maxHeight: '85%',
+    overflow: 'hidden',
+  },
+  locationSelectorHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  locationSelectorTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0f172a',
+    flex: 1,
+  },
+  locationSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f1f5f9',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 8,
+    gap: 8,
+  },
+  locationSearchInput: {
+    flex: 1,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#0f172a',
+  },
+  locationItemsScroll: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  locationItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f8fafc',
+  },
+  locationItemRowActive: {
+    backgroundColor: '#fffdf5',
+    borderRadius: 8,
+  },
+  locationItemText: {
+    fontSize: 14,
+    color: '#334155',
+  },
+  locationItemTextActive: {
+    fontWeight: '700',
+    color: '#b78103',
   },
 });
