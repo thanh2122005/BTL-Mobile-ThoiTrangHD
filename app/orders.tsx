@@ -56,6 +56,7 @@ export default function OrdersScreen() {
     }, 2500);
   };
 
+  // [Chức năng UI: "Tab trạng thái đơn hàng"] - Tất cả, Chờ xác nhận (Pending), Đang giao (Processing), Hoàn thành (Completed), Đã hủy (Cancelled)
   const tabs = ['TẤT CẢ', 'Pending', 'Processing', 'Completed', 'Cancelled'];
 
   useEffect(() => {

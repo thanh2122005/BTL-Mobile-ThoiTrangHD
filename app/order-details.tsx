@@ -69,6 +69,48 @@ const AVAILABLE_RETURN_COLORS = [
 
 const formatVND = (num: number) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(num || 0);
 
+// [Chức năng UI: "Hành trình đơn hàng"] - Tính toán 4 giai đoạn tiến trình vận chuyển dựa trên thời gian đơn hàng được tạo
+const getShippingSubStatus = (createdDate: string | Date) => {
+  const diffHours = (Date.now() - new Date(createdDate).getTime()) / (1000 * 60 * 60);
+  // Giai đoạn 1 (dưới 12 tiếng): Shop đóng gói kiểm tra tem mác
+  if (diffHours < 12) {
+    return {
+      step: 1,
+      shortLabel: 'Đóng gói xong',
+      badge: '📦 Shop đang chuẩn bị hàng & đóng gói',
+      statusText: 'Đơn hàng đã được xác nhận. Nhân viên kho đang kiểm tra tem mác và đóng gói kiện hàng.',
+      shipperNote: 'Bưu tá ThoiTrangHD Express đã tiếp nhận và đang đến lấy hàng.',
+    };
+  // Giai đoạn 2 (12 đến 36 tiếng): Đã xuất kho và bàn giao đơn vị vận chuyển
+  } else if (diffHours < 36) {
+    return {
+      step: 2,
+      shortLabel: 'Đã xuất kho',
+      badge: '🚚 Đã bàn giao ĐVVC ThoiTrangHD Express',
+      statusText: 'Kiện hàng đã rời kho phân loại tổng và đang được vận chuyển liên tỉnh.',
+      shipperNote: 'Mã vận đơn SPX đã kích hoạt định vị hành trình.',
+    };
+  // Giai đoạn 3 (36 đến 60 tiếng): Kiện hàng đến bưu cục phát trung chuyển
+  } else if (diffHours < 60) {
+    return {
+      step: 3,
+      shortLabel: 'Đang trung chuyển',
+      badge: '🚛 Đang trung chuyển qua bưu cục phát',
+      statusText: 'Đơn hàng đã cập bến bưu cục phát gần nhất tại khu vực nhận hàng.',
+      shipperNote: 'Kiện hàng đã được phân bổ cho shipper phụ trách tuyến đường của bạn.',
+    };
+  // Giai đoạn 4 (trên 60 tiếng): Shipper đang trên đường đi giao hàng
+  } else {
+    return {
+      step: 4,
+      shortLabel: 'Đang phát hàng',
+      badge: '🛵 Shipper đang giao hàng gần đến bạn',
+      statusText: 'Shipper đang trên đường giao hàng đến địa chỉ nhận. Dự kiến phát hôm nay.',
+      shipperNote: 'Vui lòng chú ý giữ liên lạc điện thoại để nhận hàng nhanh nhất.',
+    };
+  }
+};
+
 interface OrderItem {
   id: number;
   product_id: number;
@@ -117,6 +159,7 @@ export default function OrderDetailsScreen() {
   const [isConfirmingReceipt, setIsConfirmingReceipt] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isSimulatingPayment, setIsSimulatingPayment] = useState(false);
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
 
   // Return / Warranty states
   const [showReturnModal, setShowReturnModal] = useState(false);
@@ -223,6 +266,7 @@ export default function OrderDetailsScreen() {
     setReturnImages(prev => prev.filter((_, i) => i !== idx));
   };
 
+  // [Chức năng UI: "Yêu cầu Đổi/Trả"] - Mở modal để khách chọn lý do đổi size, đổi màu hoặc trả hàng
   const handleOpenReturnModal = (item?: OrderItem) => {
     const it = item || (items.length > 0 ? items[0] : null);
     setReturnItem(it);
@@ -494,6 +538,7 @@ export default function OrderDetailsScreen() {
     }
   };
 
+  // [Chức năng UI: "Hủy đơn hàng"] - Khách hàng tự hủy đơn khi đơn còn ở trạng thái Chờ xác nhận (Pending)
   const handleCancelOrder = async () => {
     if (!order) return;
     setIsCancelling(true);
@@ -588,7 +633,7 @@ export default function OrderDetailsScreen() {
       case 'pending':
         return 'Chờ xác nhận';
       case 'processing':
-        return 'Đang giao hàng';
+        return 'Đã xác nhận';
       case 'shipping':
         return 'Đang giao hàng';
       case 'completed':
@@ -597,6 +642,131 @@ export default function OrderDetailsScreen() {
         return 'Đã hủy đơn';
       default:
         return st || 'Đang xử lý';
+    }
+  };
+
+  const handlePrintInvoice = () => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8" />
+            <title>Hoa_Don_${order?.order_code || order?.id || 'ThoiTrangHD'}</title>
+            <style>
+              @page { size: A4; margin: 15mm; }
+              body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: #1e293b; padding: 20px; max-width: 760px; margin: 0 auto; }
+              .header { text-align: center; border-bottom: 2px dashed #94a3b8; padding-bottom: 14px; margin-bottom: 14px; }
+              .brand { font-size: 22px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #0f172a; margin-bottom: 4px; }
+              .subtitle { font-size: 13px; color: #64748b; margin-bottom: 4px; }
+              .title { font-size: 18px; font-weight: 800; text-transform: uppercase; color: #0f172a; margin-top: 12px; }
+              .meta { font-size: 13px; color: #475569; margin-top: 4px; }
+              .info-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 16px; font-size: 13px; line-height: 1.6; }
+              table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+              th { background: #f1f5f9; text-align: left; padding: 10px 8px; font-size: 12px; font-weight: 700; color: #334155; border-bottom: 2px solid #cbd5e1; }
+              td { padding: 9px 8px; font-size: 13px; border-bottom: 1px solid #e2e8f0; }
+              .total-table { width: 100%; margin-top: 10px; border-top: 2px dashed #94a3b8; padding-top: 8px; }
+              .total-table td { padding: 4px 8px; border-bottom: none; font-size: 13px; }
+              .grand-total { font-size: 16px; font-weight: 800; color: #0f172a; }
+              .footer { margin-top: 20px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px dashed #cbd5e1; padding-top: 12px; line-height: 1.5; }
+              .signatures { display: flex; justify-content: space-between; margin-top: 30px; text-align: center; font-size: 13px; }
+              .sig-col { width: 45%; }
+              .sig-line { margin-top: 45px; font-weight: 700; color: #0f172a; }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <div class="brand">THỜI TRANG HD - THOITRANGHD.VN</div>
+              <div class="subtitle">Thương hiệu thời trang nam nữ cao cấp & hiện đại</div>
+              <div class="subtitle">Địa chỉ: 123 Cầu Giấy, Hà Nội • Hotline: 0912.345.678</div>
+              <div class="title">HÓA ĐƠN MUA HÀNG & PHIẾU GIAO NHẬN</div>
+              <div class="meta">Mã HĐ: <b>#HD-${order?.order_code || order?.id}</b> | Mã vận đơn: <b>SPX-${order?.order_code || order?.id}</b></div>
+              <div class="meta">Thời gian đặt: ${order?.created_at ? new Date(order.created_at).toLocaleString('vi-VN') : '---'}</div>
+            </div>
+            <div class="info-box">
+              <div><b>Khách hàng:</b> ${order?.customer_name || 'Khách mua hàng'}</div>
+              <div><b>Số điện thoại:</b> ${order?.customer_phone || '---'}</div>
+              <div><b>Địa chỉ giao hàng:</b> ${order?.customer_address || '---'}</div>
+              <div><b>Phương thức thanh toán:</b> ${['bank', 'banking', 'vietqr'].includes((order?.payment_method || '').toLowerCase()) ? 'Chuyển khoản VietQR 24/7' : 'Thanh toán tiền mặt khi nhận hàng (COD)'}</div>
+              ${order?.order_note ? `<div><b>Ghi chú đơn hàng:</b> ${order.order_note}</div>` : ''}
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 35px; text-align: center;">STT</th>
+                  <th>Tên sản phẩm</th>
+                  <th style="width: 100px; text-align: center;">Phân loại</th>
+                  <th style="width: 45px; text-align: center;">SL</th>
+                  <th style="width: 100px; text-align: right;">Đơn giá</th>
+                  <th style="width: 110px; text-align: right;">Thành tiền</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${items.map((item, idx) => `
+                  <tr>
+                    <td style="text-align: center;">${idx + 1}</td>
+                    <td><b>${item.product_name}</b></td>
+                    <td style="text-align: center;">Size: ${item.size || 'M'}, ${getColorName(item.color)}</td>
+                    <td style="text-align: center;">${item.quantity}</td>
+                    <td style="text-align: right;">${formatVND(item.price)}</td>
+                    <td style="text-align: right;"><b>${formatVND(Number(item.price) * Number(item.quantity))}</b></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+            <table class="total-table">
+              <tr>
+                <td style="text-align: right;">Tạm tính:</td>
+                <td style="text-align: right; width: 140px;"><b>${formatVND(subtotal)}</b></td>
+              </tr>
+              <tr>
+                <td style="text-align: right;">Phí vận chuyển:</td>
+                <td style="text-align: right;">${order?.shipping_fee && Number(order.shipping_fee) > 0 ? formatVND(Number(order.shipping_fee)) : 'Miễn phí'}</td>
+              </tr>
+              ${discountAmount > 0 ? `
+                <tr>
+                  <td style="text-align: right; color: #b45309;">Giảm giá voucher:</td>
+                  <td style="text-align: right; color: #b45309;">-<b>${formatVND(discountAmount)}</b></td>
+                </tr>
+              ` : ''}
+              <tr>
+                <td style="text-align: right;" class="grand-total">TỔNG THANH TOÁN:</td>
+                <td style="text-align: right;" class="grand-total">${formatVND(totalPrice)}</td>
+              </tr>
+            </table>
+            <div class="signatures">
+              <div class="sig-col">
+                <div><b>Đại diện ThoiTrangHD</b></div>
+                <div style="font-size: 11px; color: #64748b;">(Ký & đóng dấu số)</div>
+                <div class="sig-line">ĐÃ XÁC THỰC</div>
+              </div>
+              <div class="sig-col">
+                <div><b>Khách hàng nhận hàng</b></div>
+                <div style="font-size: 11px; color: #64748b;">(Đồng kiểm khi nhận)</div>
+                <div class="sig-line">${order?.customer_name || 'Khách hàng'}</div>
+              </div>
+            </div>
+            <div class="footer">
+              <p>💡 Quý khách có quyền kiểm tra hàng trước khi thanh toán. ThoiTrangHD hỗ trợ đổi size / mẫu miễn phí trong 7 ngày.</p>
+              <p>Hotline CSKH: <b>0912.345.678</b> • Website: <b>thoitranghd.vn</b></p>
+            </div>
+            <script>
+              window.onload = function() {
+                window.print();
+              };
+            </script>
+          </body>
+          </html>
+        `);
+        printWindow.document.close();
+      }
+    } else {
+      Alert.alert(
+        'Hóa đơn điện tử ThoiTrangHD',
+        `Hóa đơn #${order?.order_code || order?.id} đã sẵn sàng. Bạn có thể chụp màn hình phiếu này để lưu trữ hoặc đối chiếu khi nhận hàng.`
+      );
     }
   };
 
@@ -613,7 +783,19 @@ export default function OrderDetailsScreen() {
               </TouchableOpacity>
               <Text style={styles.headerTitleWeb}>Chi tiết đơn hàng</Text>
             </View>
-            <Text style={styles.headerSubtitleWeb}>Mã đơn: #{order?.order_code || id || '---'}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+              <Text style={styles.headerSubtitleWeb}>Mã đơn: #{order?.order_code || id || '---'}</Text>
+              {order && (
+                <TouchableOpacity 
+                  style={styles.printHeaderBtnWeb}
+                  onPress={() => setShowInvoiceModal(true)}
+                  activeOpacity={0.8}
+                >
+                  <IconSymbol name="printer" size={16} color="#0f172a" />
+                  <Text style={styles.printHeaderBtnText}>In hóa đơn</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         </View>
       )}
@@ -625,7 +807,17 @@ export default function OrderDetailsScreen() {
             <IconSymbol name="arrow.left" size={24} color="#444748" />
           </TouchableOpacity>
           <Text style={styles.headerTitleMobile}>Chi tiết đơn hàng</Text>
-          <View style={{ width: 40 }} />
+          {order ? (
+            <TouchableOpacity 
+              style={{ padding: 8, marginRight: -4 }} 
+              onPress={() => setShowInvoiceModal(true)}
+              activeOpacity={0.7}
+            >
+              <IconSymbol name="printer" size={22} color="#0f172a" />
+            </TouchableOpacity>
+          ) : (
+            <View style={{ width: 40 }} />
+          )}
         </View>
       )}
 
@@ -653,16 +845,16 @@ export default function OrderDetailsScreen() {
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
           
-          <View style={[styles.mainLayout, isLargeScreen && { flexDirection: 'row' }]}>
+          <View style={[styles.mainLayout, isLargeScreen && { flexDirection: 'row', gap: 24 }]}>
             
-            <View style={styles.leftCol}>
+            <View style={[styles.leftCol, isLargeScreen && { flex: 2, width: undefined, gap: 32 }]}>
               
               {/* Status Tracker */}
-              <View style={styles.section}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                  <Text style={styles.sectionTitle}>Trạng thái đơn hàng</Text>
-                  <View style={{ backgroundColor: '#e8e8e8', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 }}>
-                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#000000' }}>
+              <View style={[styles.section, isMobile && { padding: 14 }]}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+                  <Text style={{ fontSize: isMobile ? 16 : 18, fontWeight: '700', color: '#000000', flexShrink: 1 }}>Trạng thái đơn hàng</Text>
+                  <View style={{ backgroundColor: '#e8e8e8', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, flexShrink: 0 }}>
+                    <Text style={{ fontSize: 11.5, fontWeight: '700', color: '#000000' }}>
                       {getStatusText(order.status).toUpperCase()}
                     </Text>
                   </View>
@@ -709,14 +901,78 @@ export default function OrderDetailsScreen() {
                 <Text style={{ fontSize: 13, color: '#747878', marginTop: 16 }}>
                   Thời gian đặt: {new Date(order.created_at).toLocaleString('vi-VN')}
                 </Text>
+
+                {/* Thông báo tiếp nhận đơn hàng khi mới đặt (Pending) giúp UI đầy đặn, an tâm, không bị trống trơn */}
+                {status === 'pending' && (
+                  <View style={{
+                    backgroundColor: '#fffbeb',
+                    borderColor: '#fef3c7',
+                    borderWidth: 1,
+                    borderRadius: 12,
+                    padding: 14,
+                    marginTop: 14,
+                  }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                      <IconSymbol name="hourglass" size={16} color="#d97706" />
+                      <Text style={{ fontSize: 12, fontWeight: '800', color: '#b45309', letterSpacing: 0.3 }}>
+                        ĐƠN HÀNG ĐÃ ĐƯỢC TIẾP NHẬN
+                      </Text>
+                    </View>
+                    <Text style={{ fontSize: 12.5, color: '#475569', lineHeight: 18 }}>
+                      Hệ thống đã tiếp nhận đơn hàng của bạn. Cửa hàng ThoiTrangHD sẽ sớm liên hệ xác nhận đơn và tiến hành đóng gói giao hàng.
+                    </Text>
+                    <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#fef3c7', flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={{ fontSize: 11.5, color: '#92400e', fontWeight: '600' }}>
+                        {order.payment_method === 'cod' || !order.payment_method
+                          ? '💵 Hình thức COD: Thanh toán tiền mặt khi shipper phát hàng tận nơi.'
+                          : '💳 Chuyển khoản: Shop duyệt đơn ngay sau khi nhận được sao kê VietQR.'}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
+                {/* Chi tiết tiến trình giao hàng trực quan khi đang giao */}
+                {['processing', 'shipping'].includes(status) && (
+                  <View style={{
+                    backgroundColor: '#f8fafc',
+                    borderColor: '#e2e8f0',
+                    borderWidth: 1,
+                    borderRadius: 12,
+                    padding: 14,
+                    marginTop: 14,
+                  }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
+                        <IconSymbol name="car.fill" size={16} color="#0284c7" />
+                        <Text numberOfLines={1} ellipsizeMode="tail" style={{ fontSize: 12, fontWeight: '800', color: '#0f172a' }}>TIẾN TRÌNH VẬN CHUYỂN</Text>
+                      </View>
+                      <View style={{ backgroundColor: '#f0f9ff', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 5, borderWidth: 1, borderColor: '#bae6fd', flexShrink: 0 }}>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: '#0369a1' }}>
+                          {getShippingSubStatus(order.created_at).shortLabel}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={{ backgroundColor: '#ffffff', borderRadius: 8, padding: 12, borderWidth: 1, borderColor: '#f1f5f9' }}>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#0284c7', marginBottom: 4 }}>
+                        {getShippingSubStatus(order.created_at).badge}
+                      </Text>
+                      <Text style={{ fontSize: 12, color: '#475569', lineHeight: 18 }}>
+                        {getShippingSubStatus(order.created_at).statusText}
+                      </Text>
+                      <Text style={{ fontSize: 11.5, color: '#16a34a', fontWeight: '600', marginTop: 6 }}>
+                        🛵 {getShippingSubStatus(order.created_at).shipperNote}
+                      </Text>
+                    </View>
+                  </View>
+                )}
               </View>
 
               {/* Delivery Info */}
-              <View style={[styles.section, styles.deliverySection, isLargeScreen && { flexDirection: 'row' }]}>
+              <View style={[styles.section, styles.deliverySection, isLargeScreen && { flexDirection: 'row' }, isMobile && { padding: 14 }]}>
                 <View style={styles.deliveryCol}>
                   <View style={styles.deliveryHeader}>
                     <IconSymbol name="mappin.and.ellipse" size={20} color="#747878" />
-                    <Text style={styles.deliveryTitle}>Địa chỉ nhận hàng</Text>
+                    <Text style={[styles.deliveryTitle, isMobile && { fontSize: 17 }]}>Địa chỉ nhận hàng</Text>
                   </View>
                   <Text style={styles.deliveryTextBold}>{order.customer_name || 'Khách hàng'}</Text>
                   <Text style={styles.deliveryText}>{order.customer_phone || 'Chưa cung cấp số điện thoại'}</Text>
@@ -728,7 +984,7 @@ export default function OrderDetailsScreen() {
                 <View style={styles.deliveryCol}>
                   <View style={styles.deliveryHeader}>
                     <IconSymbol name="car" size={20} color="#747878" />
-                    <Text style={styles.deliveryTitle}>Thông tin vận chuyển</Text>
+                    <Text style={[styles.deliveryTitle, isMobile && { fontSize: 17 }]}>Thông tin vận chuyển</Text>
                   </View>
                   <Text style={styles.deliveryTextBold}>Giao hàng tiêu chuẩn</Text>
                   <Text style={styles.deliveryText}>Đơn vị: ThoiTrangHD Express</Text>
@@ -750,8 +1006,8 @@ export default function OrderDetailsScreen() {
                 </View>
               ) : null}
 
-                            {/* ThoiTrangHD 7-Day Free Return Policy Banner */}
-              {['processing', 'shipping', 'completed'].includes(status) && (
+              {/* ThoiTrangHD 7-Day Free Return Policy Banner */}
+              {(status === 'completed' || order.return_status) && (
                 <View style={styles.policyCard}>
                   <View style={styles.policyHeader}>
                     <View style={styles.policyIconCircle}>
@@ -811,58 +1067,64 @@ export default function OrderDetailsScreen() {
               )}
 
               {/* Items */}
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Sản phẩm ({items.length})</Text>
-                <View style={styles.itemsList}>
+              <View style={[styles.section, isMobile && { padding: 14 }]}>
+                <Text style={[styles.sectionTitle, isMobile && { fontSize: 17, marginBottom: 12 }]}>Sản phẩm ({items.length})</Text>
+                <View style={[styles.itemsList, isMobile && { gap: 12 }]}>
                   {items.map((item, index) => (
-                    <View key={item.id || index} style={styles.orderItemCard}>
+                    <View key={item.id || index} style={[
+                      styles.orderItemCard,
+                      isMobile && { padding: 12 },
+                      status !== 'completed' && { paddingBottom: 12 }
+                    ]}>
                       <View style={styles.orderItemMain}>
-                        <Image source={getImageSource(item.image)} style={styles.itemImage} contentFit="cover" />
+                        <Image 
+                          source={getImageSource(item.image)} 
+                          style={[styles.itemImage, isMobile && { width: 76, height: 76, borderRadius: 8 }]} 
+                          contentFit="cover" 
+                        />
                         <View style={styles.itemDetails}>
-                          <Text style={styles.itemName} numberOfLines={2}>{item.product_name}</Text>
-                          <Text style={styles.itemVariant}>
+                          <Text style={[styles.itemName, isMobile && { fontSize: 14, lineHeight: 19 }]} numberOfLines={2}>{item.product_name}</Text>
+                          <Text style={[styles.itemVariant, isMobile && { fontSize: 12.5, marginBottom: 4 }]}>
                             Size: {item.size || 'M'} | Màu: {getColorName(item.color)}
                           </Text>
                           <View style={styles.itemFooter}>
-                            <Text style={styles.itemPrice}>{formatVND(item.price)}</Text>
+                            <Text style={[styles.itemPrice, isMobile && { fontSize: 16, fontWeight: '700' }]}>{formatVND(item.price)}</Text>
                             <Text style={styles.itemQty}>x{item.quantity}</Text>
                           </View>
                         </View>
                       </View>
 
                       {/* Prominent Action Buttons for this Product Item */}
-                      {['completed', 'processing', 'shipping'].includes(status) && (
-                        <View style={styles.itemBottomActions}>
-                          {status === 'completed' && (
-                            reviewedProductIds.includes(String(item.product_id)) ? (
-                              <TouchableOpacity
-                                style={styles.itemEditReviewBtn}
-                                onPress={() => handleOpenReviewModal(item, true)}
-                                activeOpacity={0.8}
-                              >
-                                <IconSymbol name="pencil" size={15} color="#b45309" />
-                                <Text style={styles.itemEditReviewText}>Sửa đánh giá</Text>
-                              </TouchableOpacity>
-                            ) : (
-                              <TouchableOpacity
-                                style={styles.itemReviewBtn}
-                                onPress={() => handleOpenReviewModal(item)}
-                                activeOpacity={0.8}
-                              >
-                                <IconSymbol name="star.fill" size={15} color="#f59e0b" />
-                                <Text style={styles.itemReviewBtnText}>Đánh giá sản phẩm</Text>
-                              </TouchableOpacity>
-                            )
+                      {status === 'completed' && (
+                        <View style={[styles.itemBottomActions, isMobile && { marginTop: 10, paddingTop: 10, gap: 8 }]}>
+                          {reviewedProductIds.includes(String(item.product_id)) ? (
+                            <TouchableOpacity
+                              style={[styles.itemEditReviewBtn, isMobile && { paddingHorizontal: 12, paddingVertical: 8 }]}
+                              onPress={() => handleOpenReviewModal(item, true)}
+                              activeOpacity={0.8}
+                            >
+                              <IconSymbol name="pencil" size={14} color="#b45309" />
+                              <Text style={[styles.itemEditReviewText, isMobile && { fontSize: 12 }]}>Sửa đánh giá</Text>
+                            </TouchableOpacity>
+                          ) : (
+                            <TouchableOpacity
+                              style={[styles.itemReviewBtn, isMobile && { paddingHorizontal: 14, paddingVertical: 8 }]}
+                              onPress={() => handleOpenReviewModal(item)}
+                              activeOpacity={0.8}
+                            >
+                              <IconSymbol name="star.fill" size={14} color="#f59e0b" />
+                              <Text style={[styles.itemReviewBtnText, isMobile && { fontSize: 12 }]}>Đánh giá sản phẩm</Text>
+                            </TouchableOpacity>
                           )}
 
                           {isReturnWindowValid && (!order.return_status || order.return_status === 'Rejected') && (
                             <TouchableOpacity
-                              style={styles.itemReturnBtn}
+                              style={[styles.itemReturnBtn, isMobile && { paddingHorizontal: 14, paddingVertical: 8 }]}
                               onPress={() => handleOpenReturnModal(item)}
                               activeOpacity={0.8}
                             >
-                              <IconSymbol name="arrow.2.squarepath" size={15} color="#111827" />
-                              <Text style={styles.itemReturnBtnText}>Yêu cầu Đổi size / Đổi trả</Text>
+                              <IconSymbol name="arrow.2.squarepath" size={14} color="#111827" />
+                              <Text style={[styles.itemReturnBtnText, isMobile && { fontSize: 12 }]}>Yêu cầu Đổi size / Đổi trả</Text>
                             </TouchableOpacity>
                           )}
                         </View>
@@ -875,9 +1137,9 @@ export default function OrderDetailsScreen() {
             </View>
 
             {/* Right Column */}
-            <View style={styles.rightCol}>
-              <View style={styles.summarySection}>
-                <Text style={styles.sectionTitle}>Thanh toán</Text>
+            <View style={[styles.rightCol, isLargeScreen && { flex: 1, width: undefined }]}>
+              <View style={[styles.summarySection, isMobile && { padding: 14 }]}>
+                <Text style={[styles.sectionTitle, isMobile && { fontSize: 17, marginBottom: 14 }]}>Thanh toán</Text>
                 
                 <View style={styles.paymentMethodBox}>
                   <IconSymbol 
@@ -906,7 +1168,7 @@ export default function OrderDetailsScreen() {
                     <View style={{ alignItems: 'center', backgroundColor: '#ffffff', padding: 8, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', marginBottom: 8 }}>
                       <Image 
                         source={{ uri: `https://img.vietqr.io/image/MB-0988776655-compact2.png?amount=${totalPrice}&addInfo=${encodeURIComponent(order.order_code)}&accountName=THOI%20TRANG%20HD` }} 
-                        style={{ width: 180, height: 180 }} 
+                        style={{ width: isMobile ? 150 : 180, height: isMobile ? 150 : 180 }} 
                         contentFit="contain"
                       />
                     </View>
@@ -940,6 +1202,24 @@ export default function OrderDetailsScreen() {
                       </View>
                     ) : (
                       <>
+                        {order.payment_status === 'unpaid' && (
+                          <View style={{
+                            backgroundColor: '#fff1f2',
+                            borderColor: '#fecdd3',
+                            borderWidth: 1,
+                            borderRadius: 10,
+                            padding: 12,
+                            marginTop: 10,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 8,
+                          }}>
+                            <IconSymbol name="exclamationmark.triangle.fill" size={18} color="#e11d48" />
+                            <Text style={{ fontSize: 12, color: '#be123c', flex: 1, lineHeight: 17 }}>
+                              Cửa hàng kiểm tra chưa nhận được thanh toán trong tài khoản. Bạn vui lòng kiểm tra lại giao dịch ngân hàng và bấm xác nhận lại khi đã hoàn tất chuyển tiền nhé!
+                            </Text>
+                          </View>
+                        )}
                         <TouchableOpacity
                           style={{
                             backgroundColor: '#16a34a',
@@ -1007,8 +1287,8 @@ export default function OrderDetailsScreen() {
                 </View>
 
                 <View style={styles.actionButtonsStack}>
-                  {/* 1. NÚT ĐÃ NHẬN ĐƯỢC HÀNG (Hiển thị khi đang giao hàng) */}
-                  {['processing', 'shipping'].includes(status) && (!order.return_status || order.return_status === 'Rejected') && (
+                  {/* 1. NÚT ĐÃ NHẬN ĐƯỢC HÀNG (Chỉ hiển thị khi đơn hàng ĐANG GIAO) */}
+                  {status === 'shipping' && (!order.return_status || order.return_status === 'Rejected') && (
                     <TouchableOpacity 
                       style={styles.confirmReceiptBtn}
                       onPress={() => setShowConfirmReceiptModal(true)}
@@ -1019,8 +1299,8 @@ export default function OrderDetailsScreen() {
                     </TouchableOpacity>
                   )}
 
-                  {/* 2. NÚT YÊU CẦU ĐỔI TRẢ HÀNG (Hiển thị khi đang giao hoặc đã nhận trong 7 ngày) */}
-                  {['processing', 'shipping', 'completed'].includes(status) && (
+                  {/* 2. NÚT YÊU CẦU ĐỔI TRẢ HÀNG (Chỉ hiển thị khi đơn hàng ĐÃ GIAO THÀNH CÔNG trong 7 ngày) */}
+                  {status === 'completed' && (
                     order.return_status ? (
                       <TouchableOpacity 
                         style={[
@@ -1067,6 +1347,16 @@ export default function OrderDetailsScreen() {
                       <Text style={styles.cancelOrderBtnText}>HỦY ĐƠN HÀNG NÀY</Text>
                     </TouchableOpacity>
                   )}
+
+                  {/* NÚT IN HÓA ĐƠN BÁN HÀNG */}
+                  <TouchableOpacity 
+                    style={styles.printInvoiceActionBtn}
+                    onPress={() => setShowInvoiceModal(true)}
+                    activeOpacity={0.85}
+                  >
+                    <IconSymbol name="printer" size={17} color="#0f172a" />
+                    <Text style={styles.printInvoiceActionBtnText}>IN HÓA ĐƠN</Text>
+                  </TouchableOpacity>
 
                   {/* 4. NÚT TIẾP TỤC MUA SẮM */}
                   <TouchableOpacity 
@@ -1524,6 +1814,193 @@ export default function OrderDetailsScreen() {
         </View>
       </Modal>
 
+      {/* Sales Invoice Modal (Hóa đơn bán hàng kiêm phiếu xuất kho) */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showInvoiceModal}
+        onRequestClose={() => setShowInvoiceModal(false)}
+      >
+        <View style={styles.invoiceModalOverlay}>
+          <TouchableOpacity 
+            style={StyleSheet.absoluteFillObject} 
+            activeOpacity={1} 
+            onPress={() => setShowInvoiceModal(false)} 
+          />
+          <View style={styles.invoiceCard}>
+            {/* Modal Top Action Bar */}
+            <View style={styles.invoiceTopBar}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                <IconSymbol name="printer" size={20} color="#0f172a" />
+                <Text style={styles.invoiceTopBarTitle}>Hóa đơn mua hàng</Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.invoiceCloseBtn}
+                onPress={() => setShowInvoiceModal(false)}
+              >
+                <IconSymbol name="xmark" size={20} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Scrollable Receipt Body */}
+            <ScrollView 
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.invoiceScrollBody}
+            >
+              {/* Receipt Paper Header */}
+              <View style={styles.receiptHeader}>
+                <View style={styles.receiptBrandRow}>
+                  <Text style={styles.receiptBrandName}>THỜI TRANG HD</Text>
+                  <View style={styles.receiptOfficialBadge}>
+                    <Text style={styles.receiptOfficialBadgeText}>CHÍNH HÃNG</Text>
+                  </View>
+                </View>
+                <Text style={styles.receiptSubBrand}>Hệ thống Thời Trang Nam Nữ Cao Cấp</Text>
+                <Text style={styles.receiptContactText}>Đ/c: 123 Cầu Giấy, Hà Nội • Hotline: 0912.345.678</Text>
+                
+                <View style={styles.receiptDashedLine} />
+
+                <Text style={styles.receiptDocTitle}>HÓA ĐƠN MUA HÀNG</Text>
+                <Text style={styles.receiptDocSubTitle}>KIÊM PHIẾU GIAO NHẬN VÀ ĐỒNG KIỂM</Text>
+
+                <View style={styles.receiptMetaGrid}>
+                  <View style={styles.receiptMetaItem}>
+                    <Text style={styles.receiptMetaLabel}>Mã hóa đơn:</Text>
+                    <Text style={styles.receiptMetaValue}>#HD-{order?.order_code || order?.id || '---'}</Text>
+                  </View>
+                  <View style={styles.receiptMetaItem}>
+                    <Text style={styles.receiptMetaLabel}>Mã vận đơn:</Text>
+                    <Text style={styles.receiptMetaValue}>SPX-{order?.order_code || order?.id || '---'}</Text>
+                  </View>
+                  <View style={styles.receiptMetaItem}>
+                    <Text style={styles.receiptMetaLabel}>Thời gian lập:</Text>
+                    <Text style={styles.receiptMetaValue}>
+                      {order?.created_at ? new Date(order.created_at).toLocaleString('vi-VN') : '---'}
+                    </Text>
+                  </View>
+                  <View style={styles.receiptMetaItem}>
+                    <Text style={styles.receiptMetaLabel}>Trạng thái đơn:</Text>
+                    <Text style={styles.receiptMetaValueBold}>
+                      {getStatusText(order?.status).toUpperCase()}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Customer & Shipping Info Box */}
+              <View style={styles.receiptCustomerBox}>
+                <Text style={styles.receiptSectionHeader}>THÔNG TIN NGƯỜI NHẬN:</Text>
+                <Text style={styles.receiptCustomerName}>{order?.customer_name || 'Khách lẻ'}</Text>
+                <Text style={styles.receiptCustomerText}>📞 SĐT: {order?.customer_phone || 'Chưa cung cấp'}</Text>
+                <Text style={styles.receiptCustomerText}>📍 Đ/c: {order?.customer_address || 'Địa chỉ nhận hàng'}</Text>
+                <Text style={styles.receiptCustomerText}>
+                  💳 Thanh toán: {['bank', 'banking', 'vietqr'].includes((order?.payment_method || '').toLowerCase()) ? 'Chuyển khoản VietQR 24/7' : 'Tiền mặt khi nhận (COD)'}
+                </Text>
+                {order?.order_note ? (
+                  <Text style={styles.receiptNoteText}>📝 Ghi chú: {order.order_note}</Text>
+                ) : null}
+              </View>
+
+              {/* Itemized Table */}
+              <View style={styles.receiptItemsSection}>
+                <View style={styles.receiptTableHeader}>
+                  <Text style={[styles.receiptTableColTitle, { flex: 1 }]}>SẢN PHẨM</Text>
+                  <Text style={[styles.receiptTableColTitle, { width: 90, textAlign: 'right' }]}>THÀNH TIỀN</Text>
+                </View>
+
+                {items.map((it, idx) => (
+                  <View key={it.id || idx} style={styles.receiptItemRow}>
+                    <View style={{ flex: 1, paddingRight: 10 }}>
+                      <Text style={styles.receiptItemName} numberOfLines={2}>
+                        {idx + 1}. {it.product_name}
+                      </Text>
+                      <Text style={styles.receiptItemVariant}>
+                        Size: {it.size || 'M'} | Màu: {getColorName(it.color)}  •  {formatVND(it.price)} x {it.quantity}
+                      </Text>
+                    </View>
+                    <Text style={styles.receiptItemTotal}>
+                      {formatVND(Number(it.price) * Number(it.quantity))}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+
+              {/* Totals Summary */}
+              <View style={styles.receiptTotalsBox}>
+                <View style={styles.receiptSummaryRow}>
+                  <Text style={styles.receiptSummaryLabel}>Tạm tính tiền hàng:</Text>
+                  <Text style={styles.receiptSummaryValue}>{formatVND(subtotal)}</Text>
+                </View>
+                <View style={styles.receiptSummaryRow}>
+                  <Text style={styles.receiptSummaryLabel}>Phí vận chuyển:</Text>
+                  <Text style={styles.receiptSummaryValue}>
+                    {order?.shipping_fee && Number(order.shipping_fee) > 0 ? formatVND(Number(order.shipping_fee)) : 'Miễn phí'}
+                  </Text>
+                </View>
+                {discountAmount > 0 && (
+                  <View style={styles.receiptSummaryRow}>
+                    <Text style={styles.receiptSummaryLabelDiscount}>Giảm giá voucher:</Text>
+                    <Text style={styles.receiptSummaryValueDiscount}>-{formatVND(discountAmount)}</Text>
+                  </View>
+                )}
+                
+                <View style={styles.receiptDashedLine} />
+
+                <View style={styles.receiptGrandTotalRow}>
+                  <Text style={styles.receiptGrandTotalLabel}>TỔNG THANH TOÁN:</Text>
+                  <Text style={styles.receiptGrandTotalValue}>{formatVND(totalPrice)}</Text>
+                </View>
+              </View>
+
+              {/* Policy & Signatures */}
+              <View style={styles.receiptPolicyBox}>
+                <Text style={styles.receiptPolicyText}>
+                  💡 Quý khách có quyền đồng kiểm trước khi nhận. Đổi size / mẫu miễn phí trong 7 ngày theo chính sách ThoiTrangHD Mall.
+                </Text>
+              </View>
+
+              <View style={styles.receiptSignatureGrid}>
+                <View style={styles.receiptSigCol}>
+                  <Text style={styles.receiptSigRole}>Đại diện ThoiTrangHD</Text>
+                  <Text style={styles.receiptSigNote}>(Đã ký điện tử)</Text>
+                  <View style={styles.receiptDigitalStamp}>
+                    <Text style={styles.receiptStampText}>XÁC THỰC</Text>
+                  </View>
+                </View>
+                <View style={styles.receiptSigCol}>
+                  <Text style={styles.receiptSigRole}>Người nhận hàng</Text>
+                  <Text style={styles.receiptSigNote}>(Đồng kiểm & xác nhận)</Text>
+                  <Text style={styles.receiptCustomerSignName}>{order?.customer_name || 'Khách hàng'}</Text>
+                </View>
+              </View>
+
+              <Text style={styles.receiptFooterThanks}>
+                Cảm ơn Quý khách đã tin tưởng và đồng hành cùng ThoiTrangHD!
+              </Text>
+            </ScrollView>
+
+            {/* Bottom Actions */}
+            <View style={styles.invoiceFooterActions}>
+              <TouchableOpacity
+                style={styles.invoicePrintBtn}
+                onPress={handlePrintInvoice}
+                activeOpacity={0.85}
+              >
+                <IconSymbol name="printer" size={18} color="#ffffff" />
+                <Text style={styles.invoicePrintBtnText}>IN HÓA ĐƠN / LƯU PDF</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.invoiceCloseModalBtn}
+                onPress={() => setShowInvoiceModal(false)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.invoiceCloseModalBtnText}>Đóng</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Toast Notification */}
       {toastMessage && (
         <View style={styles.toastContainer}>
@@ -1606,14 +2083,16 @@ const styles = StyleSheet.create({
   },
   mainLayout: {
     flexDirection: 'column',
-    gap: 20,
+    gap: 16,
+    width: '100%',
   },
   leftCol: {
-    flex: 2,
-    gap: 32,
+    gap: 16,
+    width: '100%',
   },
   rightCol: {
-    flex: 1,
+    gap: 16,
+    width: '100%',
   },
   section: {
     backgroundColor: '#ffffff',
@@ -2610,6 +3089,405 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#64748b',
     lineHeight: 16,
+  },
+
+  /* Invoice Modal Styles */
+  invoiceModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  invoiceCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 540,
+    maxHeight: '92%',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  invoiceTopBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    backgroundColor: '#fafafa',
+  },
+  invoiceTopBarTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  invoiceCloseBtn: {
+    padding: 6,
+    borderRadius: 20,
+    backgroundColor: '#f1f5f9',
+  },
+  invoiceScrollBody: {
+    padding: 16,
+    backgroundColor: '#ffffff',
+  },
+  receiptHeader: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  receiptBrandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  receiptBrandName: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#0f172a',
+    letterSpacing: 0.8,
+  },
+  receiptOfficialBadge: {
+    backgroundColor: '#0f172a',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  receiptOfficialBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#fbbf24',
+    letterSpacing: 0.5,
+  },
+  receiptSubBrand: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  receiptContactText: {
+    fontSize: 11,
+    color: '#94a3b8',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  receiptDashedLine: {
+    width: '100%',
+    height: 1,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderStyle: 'dashed',
+    marginVertical: 10,
+  },
+  receiptDocTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0f172a',
+    letterSpacing: 0.5,
+    marginTop: 4,
+  },
+  receiptDocSubTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748b',
+    letterSpacing: 0.3,
+    marginBottom: 12,
+  },
+  receiptMetaGrid: {
+    width: '100%',
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 10,
+    gap: 6,
+  },
+  receiptMetaItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  receiptMetaLabel: {
+    fontSize: 12,
+    color: '#64748b',
+  },
+  receiptMetaValue: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1e293b',
+  },
+  receiptMetaValueBold: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#0284c7',
+  },
+  receiptCustomerBox: {
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 12,
+    marginBottom: 16,
+  },
+  receiptSectionHeader: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#475569',
+    marginBottom: 6,
+    letterSpacing: 0.4,
+  },
+  receiptCustomerName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginBottom: 4,
+  },
+  receiptCustomerText: {
+    fontSize: 12,
+    color: '#334155',
+    lineHeight: 18,
+    marginBottom: 2,
+  },
+  receiptNoteText: {
+    fontSize: 11.5,
+    color: '#92400e',
+    backgroundColor: '#fefce8',
+    padding: 6,
+    borderRadius: 6,
+    marginTop: 6,
+  },
+  receiptItemsSection: {
+    marginBottom: 16,
+  },
+  receiptTableHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1.5,
+    borderBottomColor: '#0f172a',
+  },
+  receiptTableColTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#0f172a',
+    letterSpacing: 0.3,
+  },
+  receiptItemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  receiptItemName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0f172a',
+    marginBottom: 3,
+  },
+  receiptItemVariant: {
+    fontSize: 11.5,
+    color: '#64748b',
+  },
+  receiptItemTotal: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  receiptTotalsBox: {
+    backgroundColor: '#fafafa',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginBottom: 16,
+  },
+  receiptSummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  receiptSummaryLabel: {
+    fontSize: 12.5,
+    color: '#475569',
+  },
+  receiptSummaryValue: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#0f172a',
+  },
+  receiptSummaryLabelDiscount: {
+    fontSize: 12.5,
+    color: '#b45309',
+  },
+  receiptSummaryValueDiscount: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#b45309',
+  },
+  receiptGrandTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 4,
+  },
+  receiptGrandTotalLabel: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0f172a',
+    letterSpacing: 0.3,
+  },
+  receiptGrandTotalValue: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#0f172a',
+  },
+  receiptPolicyBox: {
+    backgroundColor: '#f8fafc',
+    padding: 10,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginBottom: 16,
+  },
+  receiptPolicyText: {
+    fontSize: 11,
+    color: '#475569',
+    lineHeight: 16,
+    textAlign: 'center',
+  },
+  receiptSignatureGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 16,
+    paddingTop: 8,
+  },
+  receiptSigCol: {
+    alignItems: 'center',
+  },
+  receiptSigRole: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  receiptSigNote: {
+    fontSize: 10,
+    color: '#94a3b8',
+    marginBottom: 8,
+  },
+  receiptDigitalStamp: {
+    borderWidth: 1.5,
+    borderColor: '#16a34a',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+    transform: [{ rotate: '-6deg' }],
+  },
+  receiptStampText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#16a34a',
+    letterSpacing: 1,
+  },
+  receiptCustomerSignName: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#334155',
+    marginTop: 10,
+  },
+  receiptFooterThanks: {
+    fontSize: 11,
+    fontStyle: 'italic',
+    color: '#64748b',
+    textAlign: 'center',
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  invoiceFooterActions: {
+    flexDirection: 'row',
+    gap: 10,
+    padding: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+    backgroundColor: '#ffffff',
+  },
+  invoicePrintBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#0f172a',
+    paddingVertical: 12,
+    borderRadius: 10,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  invoicePrintBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  invoiceCloseModalBtn: {
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#f8fafc',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  invoiceCloseModalBtnText: {
+    color: '#334155',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  printHeaderBtnWeb: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  printHeaderBtnText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#0f172a',
+  },
+  printInvoiceActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1.5,
+    borderColor: '#0f172a',
+    paddingVertical: 14,
+    borderRadius: 24,
+    gap: 8,
+  },
+  printInvoiceActionBtnText: {
+    color: '#0f172a',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
 
 });
