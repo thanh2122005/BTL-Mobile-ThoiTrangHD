@@ -97,8 +97,8 @@ export function ChatbotWidget() {
   const scrollViewRef = useRef<ScrollView>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
-  // Ẩn Chatbot nếu đang ở trang Admin hoặc Checkout để không che nút Đặt hàng và thông tin thanh toán
-  const isHidden = pathname?.includes('admin') || pathname?.includes('checkout');
+  // Ẩn Chatbot nếu đang ở trang Admin, Checkout hoặc Chi tiết đơn hàng để không che nội dung, nút bấm và thông tin thanh toán
+  const isHidden = pathname?.includes('admin') || pathname?.includes('checkout') || pathname?.includes('order-details');
 
   // Hiệu ứng nhịp đập nhẹ nhàng cho nút FAB
   useEffect(() => {
@@ -129,6 +129,7 @@ export function ChatbotWidget() {
     }
   }, [messages, isOpen, loading]);
 
+  // [Chức năng UI: "AI Stylist"] - Gửi câu hỏi của khách lên API backend (/api/chatbot) để nhận tư vấn size, phối đồ hoặc đơn hàng
   const handleSendMessage = async (customText?: string) => {
     const textToSend = (customText || inputText).trim();
     if (!textToSend || loading) return;
@@ -220,19 +221,31 @@ export function ChatbotWidget() {
       {!isOpen && (
         <View style={styles.fabWrapper}>
           <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-            <TouchableOpacity
-              activeOpacity={0.88}
-              style={styles.fabButton}
-              onPress={() => setIsOpen(true)}>
-              <View style={styles.fabIconBadge}>
-                <MaterialIcons name="smart-toy" size={24} color="#ffffff" />
-                <View style={styles.onlineDot} />
-              </View>
-              <View style={styles.fabTextContainer}>
-                <Text style={styles.fabTitle}>AI Stylist</Text>
-                <Text style={styles.fabSubtitle}>Tư vấn 24/7</Text>
-              </View>
-            </TouchableOpacity>
+            {isMobile ? (
+              <TouchableOpacity
+                activeOpacity={0.88}
+                style={styles.fabButtonMobile}
+                onPress={() => setIsOpen(true)}>
+                <View style={styles.fabIconBadgeMobile}>
+                  <MaterialIcons name="smart-toy" size={22} color="#ffffff" />
+                  <View style={styles.onlineDot} />
+                </View>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                activeOpacity={0.88}
+                style={styles.fabButton}
+                onPress={() => setIsOpen(true)}>
+                <View style={styles.fabIconBadge}>
+                  <MaterialIcons name="smart-toy" size={24} color="#ffffff" />
+                  <View style={styles.onlineDot} />
+                </View>
+                <View style={styles.fabTextContainer}>
+                  <Text style={styles.fabTitle}>AI Stylist</Text>
+                  <Text style={styles.fabSubtitle}>Tư vấn 24/7</Text>
+                </View>
+              </TouchableOpacity>
+            )}
           </Animated.View>
         </View>
       )}
@@ -580,6 +593,34 @@ const styles = StyleSheet.create({
     bottom: Platform.OS === 'web' ? 86 : 94,
     right: 16,
     zIndex: 9999,
+  },
+  fabButtonMobile: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#0f172a',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#4338ca',
+    ...Platform.select({
+      web: {
+        boxShadow: '0 6px 18px rgba(67, 56, 202, 0.45)',
+        cursor: 'pointer',
+      },
+      default: {
+        elevation: 8,
+        shadowColor: '#4338ca',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.35,
+        shadowRadius: 6,
+      },
+    }),
+  },
+  fabIconBadgeMobile: {
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   fabButton: {
     flexDirection: 'row',

@@ -1,28 +1,31 @@
-/**
- * CHATBOT AI SERVICE - THOITRANGHD
- * Hybrid Context-Aware RAG & Smart Mobile Rule Engine
- */
+// Dịch vụ chatbot tư vấn thời trang và hỗ trợ khách hàng ThoiTrangHD
 
+// Chuẩn hóa văn bản tiếng Việt: chuyển chữ thường, bỏ dấu thanh để tìm kiếm không dấu
 function normalizeText(str) {
   if (!str) return '';
   return str
     .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .normalize('NFD') // Tách tổ hợp ký tự có dấu
+    .replace(/[\u0300-\u036f]/g, '') // Xóa các ký hiệu dấu thanh
     .replace(/[đĐ]/g, 'd')
     .trim();
 }
 
-// 1. Phân tích tư vấn chọn size
+// Phân tích câu chat để tư vấn chọn size áo và quần theo chiều cao, cân nặng
 function analyzeSize(message) {
   const norm = normalizeText(message);
 
+  // --- BƯỚC 1: TRÍCH XUẤT CHIỀU CAO (Hỗ trợ đa dạng cách diễn đạt của người Việt) ---
   let height = null;
+  // h1Match: Dạng thập phân như "1m70", "1.75m", "1,68"
   const h1Match = message.match(/(?:cao\s*)?([12])[m|.,]([0-9]{1,2})(?:\s*m)?/i);
+  // h2Match: Dạng centimet đầy đủ như "cao 170cm", "175 cm"
   const h2Match = message.match(/(?:cao\s*)?([12][0-9]{2})\s*(?:cm)?/i);
+  // h3Match: Dạng "cao 172" (không ghi cm phía sau)
   const h3Match = message.match(/cao\s*([12][0-9]{2})/i);
+  // h4Match: Dạng nói tắt phổ biến trong giao tiếp như "m7", "m72", "m8"
   const h4Match = message.match(/\bm([5-9][0-9]?)\b/i);
-  
+
   if (h1Match) {
     const meter = parseInt(h1Match[1], 10);
     const cmPart = h1Match[2].padEnd(2, '0');
@@ -34,13 +37,15 @@ function analyzeSize(message) {
   } else if (h4Match) {
     const part = h4Match[1];
     if (part.length === 1) {
-      height = 100 + parseInt(part, 10) * 10; // m7 -> 170, m8 -> 180, m6 -> 160
+      height = 100 + parseInt(part, 10) * 10; // m7 -> 170cm, m8 -> 180cm, m6 -> 160cm
     } else {
-      height = 100 + parseInt(part, 10); // m72 -> 172, m68 -> 168
+      height = 100 + parseInt(part, 10);      // m72 -> 172cm, m68 -> 168cm
     }
   }
 
-  // Cân nặng: BẮT BUỘC có đơn vị kg/kí/cân HOẶC từ "nặng" phía trước để tránh nhầm mã đơn hàng
+  // --- BƯỚC 2: TRÍCH XUẤT CÂN NẶNG (Xử lý Edge-case xung đột dữ liệu) ---
+  // Lưu ý quan trọng: BẮT BUỘC phải có đơn vị (kg/kí/cân) hoặc từ "nặng" phía trước.
+  // Lý do: Tránh nhận nhầm mã đơn hàng (ví dụ khách gõ số "#55" thì không bị nhầm thành 55kg).
   let weight = null;
   const w1Match = message.match(/([3-9][0-9]|1[0-4][0-9])\s*(?:kg|k[ií]|c[aâ]n)\b/i);
   const w2Match = message.match(/n[a|ặ]ng\s*([3-9][0-9]|1[0-4][0-9])/i);
@@ -50,6 +55,7 @@ function analyzeSize(message) {
     weight = parseInt(w2Match[1], 10);
   }
 
+  // --- BƯỚC 3: XỬ LÝ KHI KHÁCH CHỈ HỎI CHUNG CHUNG VỀ SIZE (Chưa có số đo cụ thể) ---
   const isAskingSizeGeneral = norm.includes('size') || norm.includes('kich co') || norm.includes('tu van size') || norm.includes('bang size') || norm.includes('chon size');
 
   if (!height && !weight && isAskingSizeGeneral) {
@@ -67,13 +73,15 @@ function analyzeSize(message) {
     };
   }
 
+  // --- BƯỚC 4: TÍNH TOÁN THEO MA TRẬN KÍCH CỠ (SIZE MATRIX) ---
   if (height || weight) {
-    const h = height || 168;
-    const w = weight || 62;
+    const h = height || 168; // Giá trị ước tính mặc định nam giới Việt Nam nếu thiếu chiều cao
+    const w = weight || 62;  // Giá trị ước tính mặc định nếu thiếu cân nặng
 
     let size = 'L';
     let pantSize = '31 - 32';
 
+    // Phân cấp chuẩn theo thể trạng người tiêu dùng Việt Nam:
     if (w < 53 || (h < 162 && w < 55)) {
       size = 'S';
       pantSize = '28 - 29';
@@ -94,6 +102,7 @@ function analyzeSize(message) {
       pantSize = '36+';
     }
 
+    // --- BƯỚC 5: XỬ LÝ PHONG CÁCH FORM DÁNG (Style Preference Analysis) ---
     const isLoose = norm.includes('rong') || norm.includes('oversize') || norm.includes('thung thinh') || norm.includes('thoai mai');
     const isTight = norm.includes('om') || norm.includes('body') || norm.includes('slim');
 
@@ -130,10 +139,10 @@ function analyzeSize(message) {
   return null;
 }
 
-// 2. Tra cứu đơn hàng
+// Tra cứu đơn hàng theo mã đơn hoặc tài khoản người dùng
 async function handleOrderTracking(pool, message, userId) {
   const norm = normalizeText(message);
-  
+
   // Phát hiện mã đơn: HD804558, #55, đơn 55, mã 55...
   let orderQueryVal = null;
   const hdMatch = message.match(/(?:HD)([0-9]{2,8})/i);
@@ -278,7 +287,7 @@ async function handleOrderTracking(pool, message, userId) {
         [ord.id]
       );
       ord.items_summary = items.map(it => `${it.quantity}x ${it.product_name}`).join(', ');
-      
+
       let sDesc = 'Đang xử lý';
       switch (ord.status) {
         case 'Pending': sDesc = 'Chờ xác nhận'; break;
@@ -289,7 +298,7 @@ async function handleOrderTracking(pool, message, userId) {
       ord.status_desc = sDesc;
     }
 
-    let introText = isUserSpecific 
+    let introText = isUserSpecific
       ? '📦 **DANH SÁCH ĐƠN HÀNG GẦN ĐÂY CỦA BẠN:**\n\nEm đã tìm thấy các đơn hàng bạn đã đặt. Bạn có thể bấm nút **Tra cứu hành trình** hoặc xem chi tiết từng đơn ngay bên dưới nhé:'
       : '📦 **DANH SÁCH ĐƠN HÀNG GẦN NHẤT TRÊN HỆ THỐNG:**\n\n' + (userId ? 'Bạn chưa có đơn mới. ' : 'Dưới đây là các đơn hàng vừa đặt trên hệ thống. ') + 'Bạn có thể chạm vào từng đơn để tra cứu ngay tiến độ giao hàng nhé:';
 
@@ -557,11 +566,11 @@ async function handleStylingAndOccasions(pool, message) {
   };
 }
 
-// 6. Xử lý chính của Chatbot
+// Hàm điều phối chính: xử lý tin nhắn của khách và gọi các hàm tương ứng
 async function handleChatbotMessage(pool, message, userId = null) {
   const norm = normalizeText(message);
 
-  // 1. Chào hỏi
+  // --- NHÁNH 1: Ý ĐỊNH CHÀO HỎI (GREETING) ---
   const isGreeting = (
     /\b(hi|hello|alo|chao|xin chao)\b/i.test(norm) ||
     norm.includes('ban la ai') ||
