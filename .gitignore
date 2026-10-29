@@ -46,3 +46,12 @@ app-example
 ~$*.docx
 ~$*.xlsx
 ~$*.pptx
+# Archives & Bundles
+*.zip
+
+# Redundant uploads copy at root
+uploads/
+
+# Document extraction scratch
+scripts/extracted_doc_images/
+scripts/extracted_new_word/
